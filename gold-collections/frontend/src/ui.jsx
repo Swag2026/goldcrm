@@ -57,14 +57,14 @@ export const inputCls =
 
 export function Card({ className = "", children, ...rest }) {
   return (
-    <div className={`rounded-2xl border border-line bg-panel shadow-card ${className}`} {...rest}>
+    <div className={`rounded-lg border border-line bg-panel shadow-sm ${className}`} {...rest}>
       {children}
     </div>
   );
 }
 
 const BTN = {
-  primary: "bg-gradient-to-br from-brand to-brand-dark text-white hover:opacity-90 border-transparent",
+  primary: "bg-gradient-to-t from-orange-500 to-orange-600 text-white border-orange-400 shadow-md shadow-orange-500/30 hover:opacity-90",
   ghost: "bg-panel text-ink border-line hover:bg-hover",
   danger: "bg-danger-soft text-danger border-transparent hover:opacity-80",
   ok: "bg-ok-soft text-ok border-transparent hover:opacity-80",
@@ -261,10 +261,10 @@ export function DeltaMini({ value, balance, digits = 2 }) {
 
 export function Pills({ value, options, onChange, className = "" }) {
   return (
-    <div className={`inline-flex rounded-lg bg-card p-0.5 text-xs font-semibold ${className}`} role="radiogroup">
+    <div className={`inline-flex rounded-lg border border-line bg-card p-0.5 text-xs font-semibold ${className}`} role="radiogroup">
       {options.map(([v, label]) => (
         <button key={v} type="button" role="radio" aria-checked={value === v} onClick={() => onChange(v)}
-          className={`rounded-md px-2.5 py-1 ${value === v ? "bg-panel text-ink shadow-card" : "text-dim hover:text-ink"}`}>
+          className={`rounded-md px-2.5 py-1 ${value === v ? "bg-gradient-to-t from-orange-500 to-orange-600 text-white shadow-sm shadow-orange-500/40" : "text-dim hover:text-ink"}`}>
           {label}
         </button>
       ))}
@@ -274,7 +274,7 @@ export function Pills({ value, options, onChange, className = "" }) {
 
 export function Tile({ title, action, className = "", children, pad = true }) {
   return (
-    <section className={`rounded-2xl border border-line bg-panel shadow-card ${className}`}>
+    <section className={`rounded-lg border border-line bg-panel shadow-sm ${className}`}>
       {(title || action) && (
         <header className="flex items-center justify-between gap-2 px-5 pt-4">
           {title && <h3 className="text-sm font-semibold">{title}</h3>}
@@ -309,11 +309,30 @@ export function ContactLinks({ mobile, className = "" }) {
 
 export function TxnAge({ date, days, t }) {
   if (!date) return <span className="text-faint">—</span>;
-  const tone = days > 60 ? "text-danger" : days > 30 ? "text-warn" : "text-dim";
+  const tone = days > 30 ? "bg-danger-soft text-danger" : days > 7 ? "bg-warn-soft text-warn" : "bg-ok-soft text-ok";
   return (
-    <span className="whitespace-nowrap" dir="ltr">
-      <span className={tone}>{date}</span>
-      <span className="ms-1 text-[10px] text-faint">{days === 0 ? t("today") : <>{days} <span className="[unicode-bidi:isolate]">{t("daysAgo")}</span></>}</span>
+    <span className="inline-flex flex-col items-start gap-0.5" dir="ltr" title={date}>
+      <span className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${tone}`}>
+        {days === 0 ? t("today") : <>{days} <span className="[unicode-bidi:isolate]">{t("daysAgo")}</span></>}
+      </span>
+      <span className="ps-1 text-[10px] text-faint">{date}</span>
+    </span>
+  );
+}
+
+// Avatar circle with 2-letter initials, colour picked from a stable hash.
+const AV_TONES = [
+  "bg-orange-100 text-orange-800", "bg-sky-100 text-sky-800", "bg-emerald-100 text-emerald-800",
+  "bg-violet-100 text-violet-800", "bg-rose-100 text-rose-800", "bg-amber-100 text-amber-800",
+];
+export function Avatar({ c, isAr, size = 34 }) {
+  const name = splitName(custName(c, isAr)).main || "?";
+  const words = name.replace(/[^\p{L}\p{N}\s]/gu, "").split(/\s+/).filter(Boolean);
+  const ini = (words.length > 1 ? words[0][0] + words[1][0] : (words[0] || "?").slice(0, 2)).toUpperCase();
+  const tone = AV_TONES[Math.abs(Number(c.id) || 0) % AV_TONES.length];
+  return (
+    <span className={`flex shrink-0 items-center justify-center rounded-full text-[13px] font-semibold ${tone}`} style={{ width: size, height: size }} aria-hidden="true">
+      {ini}
     </span>
   );
 }

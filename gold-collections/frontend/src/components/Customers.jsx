@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Download, FileText, RefreshCw, Search, Upload } from "lucide-react";
+import { ArrowDown, ArrowUp, Download, FileText, MessageCircle, Phone, RefreshCw, Search, Upload } from "lucide-react";
 import { api } from "../api.js";
 import { useI18n } from "../i18n.jsx";
 import ImportReportModal from "./ImportReportModal.jsx";
 import {
-  Bal, Badge, Btn, Card, ContactLinks, DeltaMini, Empty, ErrorBox, PromiseBadge, Spinner, StatusBadge, TxnAge, CustName, fmtDate, inputCls, todayISO, useApp,
+  Bal, Badge, Btn, Card, ContactLinks, DeltaMini, Empty, ErrorBox, PromiseBadge, Spinner, StatusBadge, TxnAge, CustName, Avatar, waNumber, fmtDate, inputCls, todayISO, useApp,
 } from "../ui.jsx";
 
 const FILTERS = [
@@ -89,6 +89,7 @@ export default function Customers() {
   };
 
   const today = useMemo(todayISO, []);
+  const maxGold = useMemo(() => Math.max(...((data?.items) || []).map((c) => Math.abs(c.gold_balance)), 1), [data]);
   const Th = ({ k, children, className = "" }) => (
     <th className={`whitespace-nowrap px-3 py-2.5 text-start text-[11px] font-semibold uppercase tracking-wide text-dim ${className}`}>
       {k ? (
@@ -154,49 +155,67 @@ export default function Customers() {
         {!data ? <Spinner label={t("loading")} /> : items.length === 0 ? <Empty>{data.sync?.last_sync ? t("noCustomers") : t("noSyncYet")}</Empty> : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[900px] text-sm">
-              <thead className="border-b border-line bg-card">
+              <thead className="border-b-2 border-line bg-card">
                 <tr>
                   {isAdmin && <th className="w-10 px-3"><input type="checkbox" checked={allSelected} onChange={toggleAll} /></th>}
                   <Th k="name">{t("customer")}</Th>
                   <Th k="gold" className="text-end">{t("gold")}</Th>
                   <Th k="cash">{t("cash")} ({t("sar")})</Th>
                   <Th k="silver">{t("silver")}</Th>
-                  <Th>{t("assignedTo")}</Th>
+                  <Th className="hidden 2xl:table-cell">{t("assignedTo")}</Th>
                   <Th>{t("status")}</Th>
                   <Th className="hidden xl:table-cell">{t("lastTxn")}</Th>
-                  <Th k="last_followup" className="hidden 2xl:table-cell">{t("lastFollowup")}</Th>
-                  <Th>{t("nextFollowup")}</Th>
+                  <Th k="last_followup" className="hidden xl:table-cell">{t("lastFollowup")}</Th>
+                  <Th className="hidden 2xl:table-cell">{t("nextFollowup")}</Th>
                   <Th>{t("promise")}</Th>
-                  <th className="w-10" />
+                  <th className="w-28" />
                 </tr>
               </thead>
               <tbody>
                 {items.map((c) => {
                   const due = c.next_followup_date && c.next_followup_date <= today;
                   return (
-                    <tr key={c.id} onClick={() => openCustomer(c.id)} className="cursor-pointer border-b border-line last:border-0 hover:bg-hover">
+                    <tr key={c.id} onClick={() => openCustomer(c.id)} className="group cursor-pointer border-b border-line last:border-0 hover:bg-hover">
                       {isAdmin && (
                         <td className="px-3" onClick={(e) => e.stopPropagation()}>
                           <input type="checkbox" checked={sel.has(c.id)} onChange={() => toggleOne(c.id)} />
                         </td>
                       )}
-                      <td className="min-w-[200px] max-w-[300px] px-3 py-2.5">
-                        <CustName c={c} isAr={isAr} className="font-medium" />
-                        <div className="mt-0.5 flex items-center gap-1 text-[11px] text-faint"><span dir="ltr">{c.code}</span><ContactLinks mobile={c.mobile} className="-my-1" /></div>
+                      <td className="min-w-[220px] max-w-[320px] px-3 py-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <Avatar c={c} isAr={isAr} />
+                          <div className="min-w-0 flex-1">
+                            <CustName c={c} isAr={isAr} className="font-medium" />
+                            <div className="mt-0.5 text-[11px] text-faint" dir="ltr">{c.code}</div>
+                          </div>
+                        </div>
                       </td>
-                      <td className="px-3 py-2.5 text-end"><Bal value={c.gold_balance} unit={t("grams")} /><DeltaMini value={c.delta?.gold} balance={c.gold_balance} /></td>
+                      <td className="px-3 py-2.5 text-end">
+                        <Bal value={c.gold_balance} unit={t("grams")} /><DeltaMini value={c.delta?.gold} balance={c.gold_balance} />
+                        <div className="ms-auto mt-1.5 h-1 w-24 overflow-hidden rounded-full bg-line" dir="ltr">
+                          <div className={`h-full rounded-full ${c.gold_balance < 0 ? "bg-brand/60" : "bg-orange-500"}`} style={{ width: `${Math.min(100, (Math.abs(c.gold_balance) / maxGold) * 100)}%` }} />
+                        </div>
+                      </td>
                       <td className="px-3 py-2.5"><Bal value={c.cash_balance} digits={0} /><DeltaMini value={c.delta?.cash} balance={c.cash_balance} digits={0} /></td>
                       <td className="px-3 py-2.5"><Bal value={c.silver_balance} unit={t("grams")} digits={0} /><DeltaMini value={c.delta?.silver} balance={c.silver_balance} digits={0} /></td>
-                      <td className="px-3 py-2.5">
+                      <td className="hidden px-3 py-2.5 2xl:table-cell">
                         {c.assigned_name ? c.assigned_name : <Badge tone="neutral">{t("unassigned")}</Badge>}
                       </td>
                       <td className="px-3 py-2.5"><StatusBadge status={c.status} /></td>
                       <td className="hidden px-3 py-2.5 xl:table-cell"><TxnAge date={c.last_txn_date} days={c.days_since_txn} t={t} /></td>
-                      <td className="hidden whitespace-nowrap px-3 py-2.5 text-dim 2xl:table-cell" dir="ltr">{fmtDate(c.last_followup_at) || "—"}</td>
-                      <td className={`whitespace-nowrap px-3 py-2.5 ${due ? "font-semibold text-warn" : "text-dim"}`} dir="ltr">{fmtDate(c.next_followup_date) || "—"}</td>
+                      <td className="hidden whitespace-nowrap px-3 py-2.5 text-dim xl:table-cell" dir="ltr">{fmtDate(c.last_followup_at) || (Math.abs(c.gold_balance) > 0.0005 || Math.abs(c.cash_balance) > 0.5 ? <span className="rounded-full border border-line bg-card px-2.5 py-0.5 text-xs font-medium text-dim" dir="auto">{t("neverContacted")}</span> : "—")}</td>
+                      <td className={`hidden whitespace-nowrap px-3 py-2.5 2xl:table-cell ${due ? "font-semibold text-warn" : "text-dim"}`} dir="ltr">{fmtDate(c.next_followup_date) || "—"}</td>
                       <td className="px-3 py-2.5"><PromiseBadge promise={c.promise} /></td>
                       <td className="whitespace-nowrap px-2" onClick={(e) => e.stopPropagation()}>
-                        <button onClick={() => openStatement(c.id)} title={t("statementBtn")} className="rounded-md p-1.5 text-dim hover:bg-card hover:text-brand"><FileText size={16} /></button>
+                        <div className="flex items-center justify-end gap-1.5 transition-opacity focus-within:opacity-100 group-hover:opacity-100 [@media(hover:hover)]:opacity-0">
+                          {c.mobile && (
+                            <>
+                              <a href={`https://wa.me/${waNumber(c.mobile)}`} target="_blank" rel="noreferrer" title="WhatsApp" className="grid size-8 place-items-center rounded-lg border border-line bg-panel text-dim hover:text-ok"><MessageCircle size={15} /></a>
+                              <a href={`tel:${c.mobile}`} title={c.mobile} className="grid size-8 place-items-center rounded-lg border border-line bg-panel text-dim hover:text-brand"><Phone size={15} /></a>
+                            </>
+                          )}
+                          <button onClick={() => openStatement(c.id)} title={t("statementBtn")} className="grid size-8 place-items-center rounded-lg border border-line bg-panel text-dim hover:text-brand"><FileText size={15} /></button>
+                        </div>
                       </td>
                     </tr>
                   );

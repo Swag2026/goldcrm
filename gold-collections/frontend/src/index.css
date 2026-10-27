@@ -8,7 +8,7 @@
   --sidebar-bg: #1c1917;
   --panel: #ffffff;
   --card: #fafafa;
-  --card-hover: #f0f0f0;
+  --card-hover: #fff7ed;
   --border: #e5e5e5;
   --text: #1c2233;
   --text-dim: #6b7280;
@@ -33,7 +33,7 @@
   --sidebar-bg: #141210;
   --panel: #0a0a0c;
   --card: #17171a;
-  --card-hover: #202023;
+  --card-hover: #2a1e14;
   --border: #262629;
   --text: #f2f2f4;
   --text-dim: #9a9aa2;
@@ -114,3 +114,12 @@ input, select, textarea { font-family: inherit; }
 [dir="rtl"] .drawer-anim { animation-name: slide-in-start; }
 @keyframes slide-in-start { from { transform: translateX(-24px); opacity: 0; } to { transform: none; opacity: 1; } }
 .drawer-anim { animation: slide-in-end .18s ease-out; }
+
+/* Tables: pricing-style (clean header, orange hover rows) */
+table thead { background: var(--card); }
+table thead th { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); }
+table tbody tr { transition: background-color .12s; }
+table tbody tr:hover { background: var(--card-hover); }
+table tbody tr td:first-child { box-shadow: inset 2px 0 0 transparent; }
+table tbody tr:hover td:first-child { box-shadow: inset 2px 0 0 #f97316; }
+[dir="rtl"] table tbody tr:hover td:first-child { box-shadow: inset -2px 0 0 #f97316; }
