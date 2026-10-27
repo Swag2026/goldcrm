@@ -4,7 +4,7 @@ const en = {
   appName: "Gold Collections",
   appSub: "Customer balances & follow-ups",
   // nav
-  navOverview: "Overview", navCustomers: "Customers", navMyDay: "My Day", navKpi: "Gold KPI", navUsers: "Users", grpMain: "Collections", grpAccount: "Account", darkMode: "Dark mode", lightMode: "Light mode",
+  navOverview: "Overview", navCustomers: "Customers", navMyDay: "My Day", navKpi: "Gold KPI", navUsers: "Users", grpMain: "Collections", modeReceive: "To receive", modePay: "To pay", viewCustomers: "View customers", planMain: "Main", planFeatures: "Features", planTop: "Top customers", planStats: "Summary", planGoldDesc: "Gold owed to us, in 24K-equivalent grams", planCashDesc: "Cash owed to us in SAR", planSilverDesc: "Silver owed to us, in grams", grpAccount: "Account", darkMode: "Dark mode", lightMode: "Light mode",
   // auth
   signIn: "Sign in", username: "Username", password: "Password", signingIn: "Signing in…", signOut: "Sign out",
   changePassword: "Change password", currentPassword: "Current password", newPassword: "New password (8+ chars)",
@@ -98,7 +98,7 @@ const en = {
 const ar = {
   appName: "تحصيل الذهب",
   appSub: "أرصدة العملاء والمتابعات",
-  navOverview: "نظرة عامة", navCustomers: "العملاء", navMyDay: "يومي", navKpi: "مؤشرات الذهب", navUsers: "المستخدمون", grpMain: "التحصيل", grpAccount: "الحساب", darkMode: "الوضع الداكن", lightMode: "الوضع الفاتح",
+  navOverview: "نظرة عامة", navCustomers: "العملاء", navMyDay: "يومي", navKpi: "مؤشرات الذهب", navUsers: "المستخدمون", grpMain: "التحصيل", modeReceive: "مستحق لنا", modePay: "علينا", viewCustomers: "عرض العملاء", planMain: "الأهم", planFeatures: "التفاصيل", planTop: "أكبر العملاء", planStats: "الملخص", planGoldDesc: "الذهب المستحق لنا بما يعادل عيار 24 (جرام)", planCashDesc: "النقد المستحق لنا بالريال", planSilverDesc: "الفضة المستحقة لنا بالجرام", grpAccount: "الحساب", darkMode: "الوضع الداكن", lightMode: "الوضع الفاتح",
   signIn: "تسجيل الدخول", username: "اسم المستخدم", password: "كلمة المرور", signingIn: "جارٍ الدخول…", signOut: "تسجيل الخروج",
   changePassword: "تغيير كلمة المرور", currentPassword: "كلمة المرور الحالية", newPassword: "كلمة المرور الجديدة (٨ أحرف+)",
   save: "حفظ", cancel: "إلغاء", close: "إغلاق", saved: "تم الحفظ", loading: "جارٍ التحميل…", apply: "تطبيق", delete: "حذف",

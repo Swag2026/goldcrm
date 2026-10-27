@@ -32,7 +32,7 @@ export default function Login({ onLogin }) {
   return (
     <div
       className="flex min-h-dvh items-center justify-center bg-app p-4"
-      style={{ backgroundImage: "radial-gradient(circle at 15% 15%, #5750f114, transparent 40%), radial-gradient(circle at 85% 85%, #b8860b14, transparent 40%)" }}
+      style={{ backgroundImage: "radial-gradient(circle at 15% 15%, #f9731614, transparent 40%), radial-gradient(circle at 85% 85%, #b8860b14, transparent 40%)" }}
     >
       <div className="w-full max-w-[380px] rounded-2xl border border-line bg-panel p-8 text-center shadow-pop">
         <div className="mx-auto mb-4 flex h-[76px] w-[76px] items-center justify-center rounded-full bg-white p-2.5 shadow-md">

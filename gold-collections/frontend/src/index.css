@@ -4,18 +4,18 @@
 
 /* Palette crmswag1 jaisa (indigo + dark sidebar), gold accent upar se */
 :root {
-  --bg: #f7f3f6;
-  --sidebar-bg: #211c3d;
+  --bg: #f5f5f5;
+  --sidebar-bg: #1c1917;
   --panel: #ffffff;
-  --card: #f9f5f8;
-  --card-hover: #f2e9ef;
-  --border: #ece2e8;
+  --card: #fafafa;
+  --card-hover: #f0f0f0;
+  --border: #e5e5e5;
   --text: #1c2233;
   --text-dim: #6b7280;
   --text-faint: #9ca3af;
-  --primary: #5750f1;
-  --primary-dark: #433cc9;
-  --accent: #7a74f5;
+  --primary: #ea580c;
+  --primary-dark: #c2410c;
+  --accent: #f97316;
   --danger: #e0294b;
   --danger-soft: #fdecef;
   --warn: #d9720a;
@@ -30,7 +30,7 @@
 
 [data-theme="dark"] {
   --bg: #000000;
-  --sidebar-bg: #16132a;
+  --sidebar-bg: #141210;
   --panel: #0a0a0c;
   --card: #17171a;
   --card-hover: #202023;
@@ -38,9 +38,9 @@
   --text: #f2f2f4;
   --text-dim: #9a9aa2;
   --text-faint: #6c6c74;
-  --primary: #8a84f8;
-  --primary-dark: #a5a0fa;
-  --accent: #9d97f9;
+  --primary: #fb923c;
+  --primary-dark: #fdba74;
+  --accent: #fdba74;
   --danger: #f1495f;
   --danger-soft: #3a1420;
   --warn: #f0a63f;
@@ -60,7 +60,7 @@
   --color-muted: rgb(255 255 255 / 0.14);
   --color-muted-foreground: rgb(255 255 255 / 0.62);
   --color-border: rgb(255 255 255 / 0.1);
-  --color-ring: #a5a0fa;
+  --color-ring: #fdba74;
 }
 
 @theme inline {
@@ -106,8 +106,8 @@ input, select, textarea { font-family: inherit; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
 [data-theme="dark"] .side-bg {
   background:
-    radial-gradient(420px 220px at 15% -8%, #5750f122, transparent 60%),
-    linear-gradient(180deg, #14111f 0%, #0b0a12 78%, #050406 100%);
+    radial-gradient(420px 220px at 15% -8%, #f9731622, transparent 60%),
+    linear-gradient(180deg, #17140f 0%, #0c0a08 78%, #050404 100%);
 }
 
 @keyframes slide-in-end { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }

@@ -180,7 +180,7 @@ export default function App() {
                 <button key={c.key} role="radio" aria-checked={company === c.key} title={c.name}
                   onClick={() => switchCompany(c.key)}
                   className={`min-w-0 flex-1 truncate rounded-lg px-2 py-1.5 text-xs font-bold outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                    company === c.key ? "bg-white text-[#211c3d] shadow" : "text-white/70 hover:bg-white/10 hover:text-white"}`}>
+                    company === c.key ? "bg-white text-[#1c1917] shadow" : "text-white/70 hover:bg-white/10 hover:text-white"}`}>
                   <span className="group-data-[state=collapsed]/sidebar:hidden">{c.name}</span>
                   <span className="hidden group-data-[state=collapsed]/sidebar:inline">{c.name.slice(0, 2)}</span>
                 </button>
