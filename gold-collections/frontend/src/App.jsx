@@ -2,13 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarCheck, Coins, KeyRound, LayoutDashboard, Languages, LogOut, Menu, Moon, Sun, UserCog, Users as UsersIcon, X,
 } from "lucide-react";
-import { api, getToken, setToken, setUnauthorizedHandler } from "./api.js";
+import { api, getCompany, getToken, setCompany as setApiCompany, setToken, setUnauthorizedHandler } from "./api.js";
 import { useI18n } from "./i18n.jsx";
 import { AppCtx, Btn, ErrorBox, Field, Modal, Spinner, inputCls } from "./ui.jsx";
 import Login from "./components/Login.jsx";
 import Overview from "./components/Overview.jsx";
 import Customers from "./components/Customers.jsx";
 import CustomerDrawer from "./components/CustomerDrawer.jsx";
+import StatementModal from "./components/StatementModal.jsx";
 import MyDay from "./components/MyDay.jsx";
 import GoldKpi from "./components/GoldKpi.jsx";
 import UsersPage from "./components/UsersPage.jsx";
@@ -68,8 +69,11 @@ export default function App() {
   const [booting, setBooting] = useState(!!getToken());
   const [route, setRoute] = useState(readRoute());
   const [drawerId, setDrawerId] = useState(null);
+  const [stmtId, setStmtId] = useState(null);
   const [version, setVersion] = useState(0);
   const [collectors, setCollectors] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [company, setCompanyState] = useState(getCompany());
   const [theme, setTheme] = useState(() => localStorage.getItem("gc_theme") || "light");
   const [menuOpen, setMenuOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
@@ -99,8 +103,22 @@ export default function App() {
   }, [logout]);
 
   useEffect(() => {
-    if (user) api.collectors().then(setCollectors).catch(() => {});
+    if (!user) return;
+    api.collectors().then(setCollectors).catch(() => {});
+    api.companies().then((list) => {
+      setCompanies(list);
+      const cur = list.find((c) => c.key === getCompany()) || list[0];
+      if (cur) { setApiCompany(cur.key); setCompanyState(cur.key); }
+    }).catch(() => {});
   }, [user]);
+
+  const switchCompany = (key) => {
+    if (key === company) return;
+    setApiCompany(key);
+    setCompanyState(key);
+    setDrawerId(null);
+    setStmtId(null);
+  };
 
   const toast = useCallback((msg, tone = "ok") => {
     setToastMsg({ msg, tone });
@@ -113,8 +131,8 @@ export default function App() {
   };
 
   const ctx = useMemo(
-    () => ({ user, collectors, openCustomer: setDrawerId, bump, version, toast }),
-    [user, collectors, bump, version, toast]
+    () => ({ user, collectors, company, companies, openCustomer: setDrawerId, openStatement: setStmtId, bump, version, toast }),
+    [user, collectors, company, companies, bump, version, toast]
   );
 
   if (booting) return <Spinner label={t("loading")} />;
@@ -136,6 +154,20 @@ export default function App() {
           <div className="truncate text-[11px] text-white/55">{t("appSub")}</div>
         </div>
       </div>
+      {companies.length > 1 && (
+        <div className="px-4 pb-1">
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/45">{t("company")}</div>
+          <div className="flex gap-1 rounded-xl bg-white/10 p-1" role="radiogroup">
+            {companies.map((c) => (
+              <button key={c.key} role="radio" aria-checked={company === c.key} onClick={() => { switchCompany(c.key); setMenuOpen(false); }}
+                className={`min-w-0 flex-1 truncate rounded-lg px-2 py-1.5 text-xs font-bold ${
+                  company === c.key ? "bg-white text-[#211c3d] shadow" : "text-white/70 hover:bg-white/10 hover:text-white"}`}>
+                {c.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <nav className="flex-1 space-y-1 px-3 py-2">
         {routes.map((r) => (
           <button
@@ -190,6 +222,7 @@ export default function App() {
         <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-panel px-4 py-3 lg:hidden">
           <button onClick={() => setMenuOpen(true)} aria-label="menu"><Menu size={22} /></button>
           <span className="font-bold">{t("appName")}</span>
+          {companies.length > 1 && <span className="rounded-full bg-brand/10 px-2 py-0.5 text-xs font-bold text-brand">{companies.find((c) => c.key === company)?.name}</span>}
         </header>
         {menuOpen && (
           <div className="fixed inset-0 z-50 lg:hidden" onClick={() => setMenuOpen(false)}>
@@ -203,11 +236,12 @@ export default function App() {
 
         <main className="p-4 sm:p-6 lg:ms-64">
           <div className="mx-auto max-w-[1280px]">
-            <Page key={active} />
+            <Page key={`${active}-${company}`} />
           </div>
         </main>
 
         {drawerId && <CustomerDrawer id={drawerId} onClose={() => setDrawerId(null)} />}
+        {stmtId && <StatementModal id={stmtId} onClose={() => setStmtId(null)} />}
         {pwOpen && <PasswordModal onClose={() => setPwOpen(false)} toast={toast} />}
         {toastMsg && (
           <div className={`fixed bottom-5 left-1/2 z-[90] -translate-x-1/2 rounded-xl px-4 py-2.5 text-sm font-medium shadow-pop ${

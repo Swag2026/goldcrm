@@ -9,10 +9,10 @@ from sqlalchemy.orm import Session
 
 import config
 import gerp
-from db import Customer, CustomerSnapshot, Followup, Meta, Snapshot, User
+from db import CompanySnapshot, Customer, CustomerSnapshot, Followup, Meta, User
 
 METALS = ("cash", "gold", "silver")
-_sync_lock = threading.Lock()
+_sync_locks: dict = defaultdict(threading.Lock)
 
 
 # ------------------------------------------------------------------ meta helpers
@@ -29,13 +29,29 @@ def meta_set(db: Session, key: str, value: str):
         db.add(Meta(key=key, value=value))
 
 
-def sync_status(db: Session) -> dict:
+def get_co(key) -> dict:
+    co = config.company(key)
+    if co is None:
+        raise HTTPException(404, f"Company not found: {key}")
+    return co
+
+
+def company_customers(db: Session, company: str) -> list:
+    return list(db.scalars(select(Customer).where(Customer.company == company)))
+
+
+def _company_cids(company: str):
+    return select(Customer.id).where(Customer.company == company)
+
+
+def sync_status(db: Session, company: str) -> dict:
     return {
-        "last_sync": meta_get(db, "last_sync") or None,
-        "last_error": meta_get(db, "last_error") or None,
+        "company": company,
+        "last_sync": meta_get(db, f"last_sync:{company}") or None,
+        "last_error": meta_get(db, f"last_error:{company}") or None,
         "mock": config.MOCK,
         "ttl_seconds": config.SYNC_TTL_SECONDS,
-        "branches": config.GERP_BRANCHES,
+        "branches": get_co(company)["branches"],
     }
 
 
@@ -58,33 +74,34 @@ def totals(customers) -> dict:
     return t
 
 
-def sync_customers(db: Session, force: bool = False, raise_errors: bool = True) -> dict:
-    """GERP se balances le kar customers table update karta hai (workflow fields untouched)."""
-    with _sync_lock:
-        last = meta_get(db, "last_sync")
+def sync_customers(db: Session, company: str, force: bool = False, raise_errors: bool = True) -> dict:
+    """GERP se balances le kar customers table update karta hai (workflow fields untouched). Per company."""
+    co = get_co(company)
+    with _sync_locks[company]:
+        last = meta_get(db, f"last_sync:{company}")
         if not force and last:
             age = (config.now() - datetime.fromisoformat(last)).total_seconds()
             if age < config.SYNC_TTL_SECONDS:
-                return {"synced": False, **sync_status(db)}
+                return {"synced": False, **sync_status(db, company)}
         try:
-            rows = gerp.customer_balances(config.GERP_BRANCHES, config.today())
+            rows = gerp.customer_balances(co, config.today())
         except Exception as e:  # noqa: BLE001
             msg = e.detail if isinstance(e, HTTPException) else str(e)
-            meta_set(db, "last_error", f"{config.now().isoformat(timespec='seconds')} {msg}")
+            meta_set(db, f"last_error:{company}", f"{config.now().isoformat(timespec='seconds')} {msg}")
             db.commit()
             if raise_errors:
                 raise
-            return {"synced": False, **sync_status(db)}
+            return {"synced": False, **sync_status(db, company)}
 
         ts = config.now()
-        existing = {c.id: c for c in db.scalars(select(Customer))}
+        existing = {c.id: c for c in db.scalars(select(Customer).where(Customer.company == company))}
         seen = set()
         for r in rows:
-            seen.add(int(r["id"]))
-            cid = int(r["id"])
+            cid = co["offset"] + int(r["id"])
+            seen.add(cid)
             c = existing.get(cid)
             if c is None:
-                c = Customer(id=cid)
+                c = Customer(id=cid, company=company)
                 db.add(c)
                 existing[cid] = c
             c.code = str(r.get("customer_code") or "")
@@ -116,16 +133,16 @@ def sync_customers(db: Session, force: bool = False, raise_errors: bool = True) 
             s.cash_balance, s.gold_balance, s.silver_balance = c.cash_balance, c.gold_balance, c.silver_balance
 
         t = totals(list(existing.values()))
-        snap = db.get(Snapshot, config.today())
+        snap = db.get(CompanySnapshot, (company, config.today()))
         if snap is None:
-            snap = Snapshot(day=config.today())
+            snap = CompanySnapshot(company=company, day=config.today())
             db.add(snap)
         for k, v in t.items():
             setattr(snap, k, v)
-        meta_set(db, "last_sync", ts.isoformat(timespec="seconds"))
-        meta_set(db, "last_error", "")
+        meta_set(db, f"last_sync:{company}", ts.isoformat(timespec="seconds"))
+        meta_set(db, f"last_error:{company}", "")
         db.commit()
-        return {"synced": True, "customers": len(rows), **sync_status(db)}
+        return {"synced": True, "customers": len(rows), **sync_status(db, company)}
 
 
 # ------------------------------------------------------------------ followup lookups
@@ -166,14 +183,15 @@ def followup_dict(f: Followup) -> dict:
     }
 
 
-def prev_snapshot(db: Session):
-    """(din, {customer_id: (cash, gold, silver)}) pichhle snapshot din ka; din None => abhi koi purani history nahi."""
-    day = db.scalar(select(func.max(CustomerSnapshot.day)).where(CustomerSnapshot.day < config.today()))
+def prev_snapshot(db: Session, company: str):
+    """(din, {customer_id: (cash, gold, silver)}) pichhle snapshot din ka (is company ka); din None => abhi purani history nahi."""
+    scope = CustomerSnapshot.customer_id.in_(_company_cids(company))
+    day = db.scalar(select(func.max(CustomerSnapshot.day)).where(CustomerSnapshot.day < config.today(), scope))
     if not day:
         return None, {}
     rows = db.execute(select(CustomerSnapshot.customer_id, CustomerSnapshot.cash_balance,
                              CustomerSnapshot.gold_balance, CustomerSnapshot.silver_balance)
-                      .where(CustomerSnapshot.day == day)).all()
+                      .where(CustomerSnapshot.day == day, scope)).all()
     return day, {r[0]: (r[1], r[2], r[3]) for r in rows}
 
 
@@ -188,7 +206,7 @@ def _delta(c: Customer, prev) -> Optional[dict]:
 def customer_dict(c: Customer, last: Optional[Followup] = None, promise: Optional[Followup] = None,
                   users: Optional[dict] = None, detail: bool = False, prev=None) -> dict:
     d = {
-        "id": c.id, "code": c.code, "name": c.name, "name_ar": c.name_ar,
+        "id": c.id, "company": c.company, "code": c.code, "name": c.name, "name_ar": c.name_ar,
         "cash_balance": c.cash_balance, "gold_balance": c.gold_balance, "silver_balance": c.silver_balance,
         "assigned_to": c.assigned_to,
         "assigned_name": (users or {}).get(c.assigned_to) if c.assigned_to else None,
@@ -279,14 +297,14 @@ def _brief(c: Customer, **extra) -> dict:
             "gold_balance": c.gold_balance, "cash_balance": c.cash_balance, "silver_balance": c.silver_balance, **extra}
 
 
-def overview(db: Session) -> dict:
-    customers = list(db.scalars(select(Customer)))
+def overview(db: Session, company: str) -> dict:
+    customers = company_customers(db, company)
     t = totals(customers)
     today = config.today()
     lasts = latest_followups(db)
     promises = pending_promises(db)
     users = user_names(db)
-    prev_day, prev_map = prev_snapshot(db)
+    prev_day, prev_map = prev_snapshot(db, company)
     cmap = {c.id: c for c in customers}
 
     def top(metal, n=8):
@@ -297,7 +315,8 @@ def overview(db: Session) -> dict:
                  "value": getattr(c, f"{metal}_balance")} for c in rows]
 
     # ---- total receivable kal (pichhle snapshot din) se kitna badla
-    prev_snap = db.scalars(select(Snapshot).where(Snapshot.day < today).order_by(Snapshot.day.desc()).limit(1)).first()
+    prev_snap = db.scalars(select(CompanySnapshot).where(CompanySnapshot.company == company, CompanySnapshot.day < today)
+                           .order_by(CompanySnapshot.day.desc()).limit(1)).first()
     changes = None
     if prev_snap:
         changes = {"since": prev_snap.day.isoformat(), "debtors": t["debtors"] - prev_snap.debtors}
@@ -360,7 +379,8 @@ def overview(db: Session) -> dict:
     # ---- collector board
     since7 = datetime.combine(today - timedelta(days=6), datetime.min.time())
     since30 = datetime.combine(today - timedelta(days=30), datetime.min.time())
-    recent = db.scalars(select(Followup).where(Followup.created_at >= since30)).all()
+    in_co = Followup.customer_id.in_(_company_cids(company))
+    recent = db.scalars(select(Followup).where(Followup.created_at >= since30, in_co)).all()
     board = []
     for uid, uname in users.items():
         mine = [c for c in customers if c.assigned_to == uid]
@@ -382,7 +402,7 @@ def overview(db: Session) -> dict:
 
     # ---- activity feed + chart
     feed = []
-    for f in db.scalars(select(Followup).order_by(Followup.id.desc()).limit(10)):
+    for f in db.scalars(select(Followup).where(in_co).order_by(Followup.id.desc()).limit(10)):
         c = cmap.get(f.customer_id)
         feed.append({"id": f.id, "customer_id": f.customer_id,
                      "name": (c.name or c.name_ar) if c else "", "name_ar": (c.name_ar or c.name) if c else "",
@@ -390,7 +410,7 @@ def overview(db: Session) -> dict:
                      "has_promise": bool(f.promise_date), "created_at": f.created_at.isoformat(timespec="seconds")})
     since = today - timedelta(days=13)
     act = defaultdict(int)
-    for f in db.scalars(select(Followup).where(Followup.created_at >= datetime.combine(since, datetime.min.time()))):
+    for f in db.scalars(select(Followup).where(Followup.created_at >= datetime.combine(since, datetime.min.time()), in_co)):
         act[f.created_at.date().isoformat()] += 1
     activity = [{"day": (since + timedelta(days=i)).isoformat(),
                  "count": act.get((since + timedelta(days=i)).isoformat(), 0)} for i in range(14)]
@@ -405,8 +425,10 @@ def overview(db: Session) -> dict:
     share = [*gold_top, *([{"id": 0, "name": "Others", "name_ar": "أخرى", "value": others}] if others > 0 else [])]
 
     debtor_cs = [c for c in customers if is_debtor(c)]
-    snaps = db.scalars(select(Snapshot).order_by(Snapshot.day.desc()).limit(30)).all()[::-1]
+    snaps = db.scalars(select(CompanySnapshot).where(CompanySnapshot.company == company)
+                         .order_by(CompanySnapshot.day.desc()).limit(30)).all()[::-1]
     return {
+        "company": company,
         "totals": t,
         "changes": changes,
         "customers_total": len(customers),
@@ -439,10 +461,10 @@ def overview(db: Session) -> dict:
     }
 
 
-def my_day(db: Session, user: User, scope: str) -> dict:
+def my_day(db: Session, user: User, scope: str, company: str) -> dict:
     today = config.today()
     users = user_names(db)
-    customers = {c.id: c for c in db.scalars(select(Customer))}
+    customers = {c.id: c for c in company_customers(db, company)}
     lasts = latest_followups(db)
     promises = pending_promises(db)
     mine_only = scope == "mine"

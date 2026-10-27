@@ -53,14 +53,24 @@ def user_out(u: User) -> dict:
     return {"id": u.id, "username": u.username, "name": u.name, "role": u.role, "active": u.active}
 
 
-def ensure_fresh(db: Session):
+def ensure_fresh(db: Session, company: str):
     """Cache purana ho to GERP se refresh (fail ho to purana cache hi chalta hai)."""
-    svc.sync_customers(db, force=False, raise_errors=False)
+    svc.sync_customers(db, company, force=False, raise_errors=False)
+
+
+def resolve_company(company: str = "") -> str:
+    return svc.get_co(company)["key"]
 
 
 @app.get("/api/health")
 def health():
     return {"ok": True, "mock": config.MOCK}
+
+
+@app.get("/api/companies")
+def companies(_: User = Depends(current_user)):
+    """Password kabhi bahar nahi jaata."""
+    return [{"key": c["key"], "name": c["name"]} for c in config.COMPANIES]
 
 
 # ------------------------------------------------------------------ auth
@@ -162,47 +172,50 @@ def collectors(_: User = Depends(current_user), db: Session = Depends(get_db)):
 
 # ------------------------------------------------------------------ sync
 @app.get("/api/sync/status")
-def sync_status(_: User = Depends(current_user), db: Session = Depends(get_db)):
-    return svc.sync_status(db)
+def sync_status(company: str = "", _: User = Depends(current_user), db: Session = Depends(get_db)):
+    return svc.sync_status(db, resolve_company(company))
 
 
 @app.post("/api/sync")
-def sync_now(_: User = Depends(current_user), db: Session = Depends(get_db)):
-    last = svc.meta_get(db, "last_sync")
+def sync_now(company: str = "", _: User = Depends(current_user), db: Session = Depends(get_db)):
+    company = resolve_company(company)
+    last = svc.meta_get(db, f"last_sync:{company}")
     if last and (config.now() - datetime.fromisoformat(last)).total_seconds() < 30:
-        return {"synced": False, "reason": "recent", **svc.sync_status(db)}
-    return svc.sync_customers(db, force=True)
+        return {"synced": False, "reason": "recent", **svc.sync_status(db, company)}
+    return svc.sync_customers(db, company, force=True)
 
 
 # ------------------------------------------------------------------ customers
-def _filtered(db, user, q, flt, assigned, status):
-    ensure_fresh(db)
-    customers = list(db.scalars(select(Customer)))
+def _filtered(db, user, q, flt, assigned, status, company):
+    ensure_fresh(db, company)
+    customers = svc.company_customers(db, company)
     return svc.apply_filters(customers, q, flt, assigned, status, user.id)
 
 
 @app.get("/api/customers")
 def list_customers(
     q: str = "", flt: str = "with_balance", assigned: str = "", status: str = "",
-    sort: str = "gold", desc: bool = True, limit: int = Query(1000, le=5000),
+    sort: str = "gold", desc: bool = True, limit: int = Query(1000, le=5000), company: str = "",
     user: User = Depends(current_user), db: Session = Depends(get_db),
 ):
-    customers = _filtered(db, user, q, flt, assigned, status)
+    company = resolve_company(company)
+    customers = _filtered(db, user, q, flt, assigned, status, company)
     users = svc.user_names(db)
     lasts, promises = svc.latest_followups(db), svc.pending_promises(db)
-    prev = svc.prev_snapshot(db)
+    prev = svc.prev_snapshot(db, company)
     rows = [svc.customer_dict(c, lasts.get(c.id), promises.get(c.id), users, prev=prev) for c in customers]
     rows = svc.sort_customers(rows, sort, desc)[:limit]
-    return {"items": rows, "total": len(customers), "sync": svc.sync_status(db),
+    return {"items": rows, "total": len(customers), "sync": svc.sync_status(db, company),
             "prev_day": prev[0].isoformat() if prev[0] else None}
 
 
 @app.get("/api/customers/export.xlsx")
 def export_customers(
-    q: str = "", flt: str = "with_balance", assigned: str = "", status: str = "",
+    q: str = "", flt: str = "with_balance", assigned: str = "", status: str = "", company: str = "",
     user: User = Depends(current_user), db: Session = Depends(get_db),
 ):
-    customers = _filtered(db, user, q, flt, assigned, status)
+    company = resolve_company(company)
+    customers = _filtered(db, user, q, flt, assigned, status, company)
     users = svc.user_names(db)
     lasts = svc.latest_followups(db)
     wb = Workbook()
@@ -225,7 +238,62 @@ def export_customers(
     ws.freeze_panes = "A2"
     buf = io.BytesIO()
     wb.save(buf)
-    name = f"gold-customers-{config.today().isoformat()}.xlsx"
+    name = f"gold-customers-{company}-{config.today().isoformat()}.xlsx"
+    return Response(buf.getvalue(), headers={"Content-Disposition": f'attachment; filename="{name}"'},
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+def _statement(cid, from_date, to_date, db):
+    if from_date > to_date:
+        raise HTTPException(400, "from_date to_date se pehle honi chahiye")
+    if (to_date - from_date).days > 800:
+        raise HTTPException(400, "Range bahut lambi hai (max ~2 saal)")
+    c = db.get(Customer, cid)
+    if not c:
+        raise HTTPException(404, "Customer not found")
+    co = svc.get_co(c.company)
+    st = gerp.customer_statement(co, cid - co["offset"], from_date, to_date)
+    st["company"] = co["name"]
+    st["customer"]["name"] = st["customer"]["name"] or c.name
+    st["customer"]["name_ar"] = st["customer"]["name_ar"] or c.name_ar
+    st["generated_at"] = config.now().isoformat(timespec="minutes")
+    return st
+
+
+@app.get("/api/customers/{cid}/statement")
+def customer_statement(cid: int, from_date: date, to_date: date, _: User = Depends(current_user),
+                       db: Session = Depends(get_db)):
+    return _statement(cid, from_date, to_date, db)
+
+
+@app.get("/api/customers/{cid}/statement.xlsx")
+def customer_statement_xlsx(cid: int, from_date: date, to_date: date, _: User = Depends(current_user),
+                            db: Session = Depends(get_db)):
+    st = _statement(cid, from_date, to_date, db)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Statement"
+    ws.append(["Statement of account"])
+    ws["A1"].font = Font(bold=True, size=14)
+    ws.append(["Customer", st["customer"]["name"] or st["customer"]["name_ar"], st["customer"]["name_ar"] or ""])
+    ws.append(["Code", st["customer"]["code"]])
+    ws.append(["Period", f'{st["from_date"]} -> {st["to_date"]}'])
+    ws.append(["Generated", st["generated_at"]])
+    ws.append([])
+    ws.append(["", "Opening", "Debit", "Credit", "Closing"])
+    for cell in ws[ws.max_row]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="5750F1")
+    for m_, label in (("gold", "Gold (g)"), ("cash", "Cash"), ("silver", "Silver (g)")):
+        r = st["metals"][m_]
+        ws.append([label, r["opening"], r["debit"], r["credit"], r["closing"]])
+    ws.append([])
+    ws.append(["Balance = debit - credit. Positive = customer owes us."])
+    for col, w in zip("ABCDE", (22, 18, 18, 18, 18)):
+        ws.column_dimensions[col].width = w
+    buf = io.BytesIO()
+    wb.save(buf)
+    name = f'statement-{st["customer"]["code"] or cid}-{st["to_date"]}.xlsx'
     return Response(buf.getvalue(), headers={"Content-Disposition": f'attachment; filename="{name}"'},
                     media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
@@ -257,7 +325,7 @@ def customer_detail(cid: int, user: User = Depends(current_user), db: Session = 
     last = fus[0] if fus else None
     promise = next((f for f in sorted(fus, key=lambda f: f.promise_date or date.max)
                     if f.promise_status == "pending" and f.promise_date), None)
-    return {**svc.customer_dict(c, last, promise, users, detail=True, prev=svc.prev_snapshot(db)),
+    return {**svc.customer_dict(c, last, promise, users, detail=True, prev=svc.prev_snapshot(db, c.company)),
             "followups": [svc.followup_dict(f) for f in fus],
             "history": svc.customer_history(db, cid)}
 
@@ -369,28 +437,31 @@ def delete_followup(fid: int, user: User = Depends(current_user), db: Session = 
 
 # ------------------------------------------------------------------ dashboards
 @app.get("/api/myday")
-def my_day(scope: str = "", user: User = Depends(current_user), db: Session = Depends(get_db)):
-    ensure_fresh(db)
+def my_day(scope: str = "", company: str = "", user: User = Depends(current_user), db: Session = Depends(get_db)):
+    company = resolve_company(company)
+    ensure_fresh(db, company)
     scope = scope if scope in ("mine", "all") else ("all" if user.role == "admin" else "mine")
-    return svc.my_day(db, user, scope)
+    return svc.my_day(db, user, scope, company)
 
 
 @app.get("/api/overview")
-def overview(_: User = Depends(current_user), db: Session = Depends(get_db)):
-    ensure_fresh(db)
-    return {**svc.overview(db), "sync": svc.sync_status(db)}
+def overview(company: str = "", _: User = Depends(current_user), db: Session = Depends(get_db)):
+    company = resolve_company(company)
+    ensure_fresh(db, company)
+    return {**svc.overview(db, company), "sync": svc.sync_status(db, company)}
 
 
 @app.get("/api/kpi")
 def kpi(
     from_date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
     to_date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
-    branches: str = "",
+    branches: str = "", company: str = "",
     opening_gold_grams: float = 0, opening_gold_cash: float = 0, opening_silver: float = 0,
     _: User = Depends(current_user),
 ):
     try:
-        ids = [int(b) for b in branches.split(",") if b.strip()] or config.GERP_BRANCHES
+        co = svc.get_co(company)
+        ids = [int(b) for b in branches.split(",") if b.strip()] or co["branches"]
     except ValueError:
         raise HTTPException(400, "branches sirf numbers hone chahiye")
-    return gerp.kpi(ids, from_date, to_date, opening_gold_grams, opening_gold_cash, opening_silver)
+    return gerp.kpi(co, ids, from_date, to_date, opening_gold_grams, opening_gold_cash, opening_silver)

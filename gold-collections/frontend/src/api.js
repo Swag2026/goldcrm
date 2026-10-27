@@ -3,6 +3,13 @@ const BASE = import.meta.env.VITE_API_URL || "";
 let token = null;
 try { token = localStorage.getItem("gc_token"); } catch { /* ignore */ }
 let onUnauthorized = () => {};
+let company = "";
+try { company = localStorage.getItem("gc_company") || ""; } catch { /* ignore */ }
+export const setCompany = (c) => {
+  company = c || "";
+  try { company ? localStorage.setItem("gc_company", company) : localStorage.removeItem("gc_company"); } catch { /* ignore */ }
+};
+export const getCompany = () => company;
 
 export const setToken = (t) => {
   token = t;
@@ -42,7 +49,8 @@ export const api = {
   me: () => request("/api/auth/me"),
   changePassword: (current, next) => request("/api/auth/password", { method: "POST", body: { current, new: next } }),
 
-  customers: (params) => request(`/api/customers?${qs(params)}`),
+  companies: () => request("/api/companies"),
+  customers: (params) => request(`/api/customers?${qs({ ...params, company })}`),
   customer: (id) => request(`/api/customers/${id}`),
   patchCustomer: (id, body) => request(`/api/customers/${id}`, { method: "PATCH", body }),
   assign: (ids, user_id) => request("/api/customers/assign", { method: "POST", body: { ids, user_id } }),
@@ -50,24 +58,36 @@ export const api = {
   patchFollowup: (id, body) => request(`/api/followups/${id}`, { method: "PATCH", body }),
   deleteFollowup: (id) => request(`/api/followups/${id}`, { method: "DELETE" }),
   exportXlsx: async (params) => {
-    const res = await request(`/api/customers/export.xlsx?${qs(params)}`, { raw: true });
+    const res = await request(`/api/customers/export.xlsx?${qs({ ...params, company })}`, { raw: true });
     const blob = await res.blob();
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `gold-customers-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.download = `gold-customers-${company || "all"}-${new Date().toISOString().slice(0, 10)}.xlsx`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   },
 
+  statement: (id, params) => request(`/api/customers/${id}/statement?${qs(params)}`),
+  statementXlsx: async (id, params, filename) => {
+    const res = await request(`/api/customers/${id}/statement.xlsx?${qs(params)}`, { raw: true });
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  },
   collectors: () => request("/api/collectors"),
   users: () => request("/api/users"),
   createUser: (body) => request("/api/users", { method: "POST", body }),
   patchUser: (id, body) => request(`/api/users/${id}`, { method: "PATCH", body }),
 
-  overview: () => request("/api/overview"),
-  myday: (scope) => request(`/api/myday?${qs({ scope })}`),
-  sync: () => request("/api/sync", { method: "POST" }),
-  kpi: (params) => request(`/api/kpi?${qs(params)}`),
+  overview: () => request(`/api/overview?${qs({ company })}`),
+  myday: (scope) => request(`/api/myday?${qs({ scope, company })}`),
+  sync: () => request(`/api/sync?${qs({ company })}`, { method: "POST" }),
+  kpi: (params) => request(`/api/kpi?${qs({ ...params, company })}`),
 };

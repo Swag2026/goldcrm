@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Check, MapPin, MessageCircle, Phone, StickyNote, Trash2, X, XCircle, HelpCircle } from "lucide-react";
+import { Check, FileText, MapPin, MessageCircle, Phone, StickyNote, Trash2, X, XCircle, HelpCircle } from "lucide-react";
 import { api } from "../api.js";
 import { useI18n } from "../i18n.jsx";
 import {
-  Bal, Badge, Btn, DeltaMini, ErrorBox, Field, Pills, Spinner, StatusBadge, addDays, custName, fmt, fmtDate, inputCls, todayISO, useApp,
+  Bal, Badge, Btn, DeltaMini, ErrorBox, Field, Pills, Spinner, StatusBadge, addDays, CustName, fmt, fmtDate, inputCls, todayISO, useApp,
 } from "../ui.jsx";
 
 const KIND_ICON = { call: Phone, whatsapp: MessageCircle, visit: MapPin, note: StickyNote, other: HelpCircle };
@@ -31,7 +31,7 @@ function BalanceCard({ title, unit, digits, debit, credit, balance, delta }) {
 
 export default function CustomerDrawer({ id, onClose }) {
   const { t, isAr } = useI18n();
-  const { user, collectors, bump, toast } = useApp();
+  const { user, collectors, bump, toast, openStatement } = useApp();
   const [c, setC] = useState(null);
   const [err, setErr] = useState("");
   const [notes, setNotes] = useState("");
@@ -101,14 +101,17 @@ export default function CustomerDrawer({ id, onClose }) {
           <>
             <div className="flex items-start justify-between gap-3 border-b border-line p-5">
               <div className="min-w-0">
-                <h2 className="truncate text-lg font-bold">{custName(c, isAr)}</h2>
+                <h2 className="text-lg font-bold"><CustName c={c} isAr={isAr} /></h2>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-dim">
                   <span dir="ltr">{c.code}</span>
                   <StatusBadge status={c.status} />
                   {c.promise && <Badge tone={c.promise.overdue ? "danger" : "gold"}>{t("promise")}: {fmtDate(c.promise.date)}</Badge>}
                 </div>
               </div>
-              <button onClick={onClose} className="rounded-lg p-1.5 text-dim hover:bg-hover hover:text-ink" aria-label={t("close")}><X size={20} /></button>
+              <div className="flex shrink-0 items-center gap-2">
+                <Btn size="sm" onClick={() => openStatement(id)}><FileText size={14} /> {t("statementBtn")}</Btn>
+                <button onClick={onClose} className="rounded-lg p-1.5 text-dim hover:bg-hover hover:text-ink" aria-label={t("close")}><X size={20} /></button>
+              </div>
             </div>
 
             <div className="flex-1 space-y-5 overflow-y-auto p-5">

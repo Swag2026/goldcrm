@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Download, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, Download, FileText, RefreshCw, Search } from "lucide-react";
 import { api } from "../api.js";
 import { useI18n } from "../i18n.jsx";
 import {
-  Bal, Badge, Btn, Card, DeltaMini, Empty, ErrorBox, PromiseBadge, Spinner, StatusBadge, custName, fmtDate, inputCls, todayISO, useApp,
+  Bal, Badge, Btn, Card, DeltaMini, Empty, ErrorBox, PromiseBadge, Spinner, StatusBadge, CustName, fmtDate, inputCls, todayISO, useApp,
 } from "../ui.jsx";
 
 const FILTERS = [
@@ -18,7 +18,7 @@ const readHashParams = () => {
 
 export default function Customers() {
   const { t, isAr } = useI18n();
-  const { user, collectors, openCustomer, version, bump, toast } = useApp();
+  const { user, collectors, openCustomer, openStatement, version, bump, toast } = useApp();
   const init = readHashParams();
   const [q, setQ] = useState("");
   const [flt, setFlt] = useState(init.get("flt") || "with_balance");
@@ -31,6 +31,11 @@ export default function Customers() {
   const [sel, setSel] = useState(new Set());
   const [bulkUser, setBulkUser] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const doSync = async () => {
+    setSyncing(true);
+    try { await api.sync(); bump(); } catch (e) { toast(e.message, "err"); } finally { setSyncing(false); }
+  };
   const isAdmin = user.role === "admin";
 
   useEffect(() => {
@@ -134,8 +139,14 @@ export default function Customers() {
       </Card>
 
       <ErrorBox>{err}</ErrorBox>
+      {data?.sync?.last_error && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-warn/30 bg-warn-soft p-3 text-sm text-warn">
+          <span>⚠️ {t("syncFailedBanner")} <span className="text-xs opacity-80" dir="ltr">{data.sync.last_error.slice(0, 160)}</span></span>
+          <Btn size="sm" onClick={doSync} loading={syncing}><RefreshCw size={13} /> {t("syncNow")}</Btn>
+        </div>
+      )}
       <Card className="overflow-hidden">
-        {!data ? <Spinner label={t("loading")} /> : items.length === 0 ? <Empty>{t("noCustomers")}</Empty> : (
+        {!data ? <Spinner label={t("loading")} /> : items.length === 0 ? <Empty>{data.sync?.last_sync ? t("noCustomers") : t("noSyncYet")}</Empty> : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[900px] text-sm">
               <thead className="border-b border-line bg-card">
@@ -150,6 +161,7 @@ export default function Customers() {
                   <Th k="last_followup" className="hidden 2xl:table-cell">{t("lastFollowup")}</Th>
                   <Th>{t("nextFollowup")}</Th>
                   <Th>{t("promise")}</Th>
+                  <th className="w-10" />
                 </tr>
               </thead>
               <tbody>
@@ -162,8 +174,8 @@ export default function Customers() {
                           <input type="checkbox" checked={sel.has(c.id)} onChange={() => toggleOne(c.id)} />
                         </td>
                       )}
-                      <td className="max-w-[260px] px-3 py-2.5">
-                        <div className="truncate font-medium">{custName(c, isAr)}</div>
+                      <td className="min-w-[200px] max-w-[300px] px-3 py-2.5">
+                        <CustName c={c} isAr={isAr} className="font-medium" />
                         <div className="text-[11px] text-faint" dir="ltr">{c.code}</div>
                       </td>
                       <td className="px-3 py-2.5 text-end"><Bal value={c.gold_balance} unit={t("grams")} /><DeltaMini value={c.delta?.gold} balance={c.gold_balance} /></td>
@@ -176,6 +188,9 @@ export default function Customers() {
                       <td className="hidden whitespace-nowrap px-3 py-2.5 text-dim 2xl:table-cell" dir="ltr">{fmtDate(c.last_followup_at) || "—"}</td>
                       <td className={`whitespace-nowrap px-3 py-2.5 ${due ? "font-semibold text-warn" : "text-dim"}`} dir="ltr">{fmtDate(c.next_followup_date) || "—"}</td>
                       <td className="px-3 py-2.5"><PromiseBadge promise={c.promise} /></td>
+                      <td className="px-2" onClick={(e) => e.stopPropagation()}>
+                        <button onClick={() => openStatement(c.id)} title={t("statementBtn")} className="rounded-md p-1.5 text-dim hover:bg-card hover:text-brand"><FileText size={16} /></button>
+                      </td>
                     </tr>
                   );
                 })}

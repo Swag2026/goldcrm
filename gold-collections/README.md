@@ -10,6 +10,7 @@ crmswag1 se alag, sirf gold ke liye.
 - **Customer drawer**: balances (debit/credit/balance), notes, status (active/hold/legal), assign, follow-up log, payment promises (mark kept/broken)
 - **My Day**: due follow-ups, due promises (7 din), unassigned debtors ("Take it")
 - **Gold KPI**: Dashboards KPI PDF ke formulas (sales/purchase/net, green = positive, red = negative)
+- **Statement of account**: har customer ka period statement (opening → debit/credit → closing, gold/cash/silver), screen par + Excel + Print/PDF (Arabic bhi). GERP balances se bana summary hai, line-by-line entries API mein nahi
 - **Users**: admin/collector roles, disable, reset password
 - Arabic/English (RTL), dark mode, mobile friendly
 
@@ -53,3 +54,21 @@ Pehli baar admin = `ADMIN_USERNAME` / `ADMIN_PASSWORD` (ADMIN_PASSWORD khali ho 
 - Kpi: `331110001`, `331110002`, `321110002` GERP API se nahi aate → 0 maane jaate hain. Codes `backend/gerp.py` mein.
 - Opening balance KPI page par manual field hai.
 - Dashboard ko public mat chhodo: login hai, par Cloudflare Access bhi laga sakte ho.
+
+## Customer naam
+GERP mein `customer_name` aur `customer_name_ar` aksar dono Arabic hote hain, bracket mein trade name / English (`( معرض سواج جولد )`). UI naam ko saaf karta hai (extra spaces hataye), bracket wala hissa neeche alag chhoti line mein dikhata hai, aur RTL/LTR mix theek rakhta hai. Search naam, bracket text (English bhi) aur code teeno par chalta hai.
+
+## Multi-company (alag GERP databases)
+Har company ka apna GERP database/URL hai (SWAG = swag.gerpsystems.com, LAROUCHE = laroche.gerpsystems.com). App mein sidebar ke upar
+company switcher hai; har company ke apne customers, sync, history, Gold KPI, statement, My Day aur overview hote hain.
+Follow-ups/notes/assignments customer ke saath company mein hi rehte hain. Users (collectors) sab companies mein common hain.
+
+Config: Railway/`.env` mein ek variable `GERP_COMPANIES` (JSON; passwords sirf server par rehte hain):
+```json
+[{"key":"swag","name":"SWAG","base":"https://swag.gerpsystems.com/external","username":"external","password":"...","branches":[1,2]},
+ {"key":"laroche","name":"LAROUCHE","base":"https://laroche.gerpsystems.com/external","username":"external","password":"...","branches":[1]}]
+```
+- Order mat badlo, nayi company hamesha **end mein** jodo (customer id = company index x 1,000,000 + GERP id). Pehli company (swag) ke purane ids waise hi rehte hain.
+- Purana `GERP_USERNAME/GERP_PASSWORD/GERP_BASE` setup bhi chalta hai (ek company "swag").
+- Purana database apne aap migrate hota hai (customers mein `company` column, purani `snapshots` -> `company_snapshots`); data nahi jaata.
+- Total (consolidated) database ke liye alag API user + URL chahiye; wo ek aur entry se jud jayega. Total ko SWAG+LAROUCHE ke saath jodna mat (double count).

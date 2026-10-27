@@ -12,7 +12,7 @@ if not config.MOCK:
     sys.exit("seed_demo.py sirf GERP_MOCK=1 ke saath chalta hai (asli database ko kabhi mat chhuo)")
 
 import services as svc  # noqa: E402
-from db import Customer, CustomerSnapshot, Followup, SessionLocal, Snapshot, User, init_db  # noqa: E402
+from db import CompanySnapshot, CustomerSnapshot, Followup, SessionLocal, User, init_db  # noqa: E402
 from security import hash_password  # noqa: E402
 from sqlalchemy import delete, select  # noqa: E402
 
@@ -34,85 +34,77 @@ for uname, name in (("ali", "Ali Khan"), ("sara", "Sara"), ("omar", "Omar")):
     collectors.append(u)
 db.commit()
 
-# --- customers (mock sync) + saaf history
-svc.sync_customers(db, force=True)
-db.execute(delete(CustomerSnapshot))
-db.execute(delete(Snapshot))
+# --- har company: mock sync + saaf history
+svc_cos = [c["key"] for c in config.COMPANIES]
 db.execute(delete(Followup))
 db.commit()
-
 today = config.today()
-customers = list(db.scalars(select(Customer)))
-debtors = [c for c in customers if svc.is_debtor(c)]
-debtors.sort(key=lambda c: -c.gold_balance)
-
-# assignment: ~70% debtors assigned
-for i, c in enumerate(debtors):
-    c.assigned_to = None if i % 4 == 3 else collectors[i % 3].id
-for c in debtors[5:7]:
-    c.status = "hold"
-debtors[3].status = "legal"
-db.commit()
-
-# --- 14 din ki balance history: aaj se peeche random walk (kuch customers ne bharna kiya, kuch ka badha)
 DAYS = 14
-state = {c.id: [c.cash_balance, c.gold_balance, c.silver_balance] for c in customers}
-hist = {}  # day_offset -> {cid: tuple}
-for off in range(0, DAYS + 1):
-    hist[off] = {cid: tuple(v) for cid, v in state.items()}
-    for cid, v in state.items():
-        r = rnd.random()
-        if r < 0.22:    # is din payment hui thi => pehle balance zyada tha
-            f = rnd.uniform(1.05, 1.35)
-        elif r < 0.34:  # is din naya sale hua tha => pehle kam tha
-            f = rnd.uniform(0.7, 0.95)
-        else:
-            f = 1.0
-        for i in range(3):
-            v[i] = v[i] * f if abs(v[i]) > 1 else v[i]
-
-for off in range(DAYS, -1, -1):
-    day = today - timedelta(days=off)
-    tot = {"cash_receivable": 0, "cash_payable": 0, "gold_receivable": 0, "gold_payable": 0,
-           "silver_receivable": 0, "silver_payable": 0, "debtors": 0}
-    for cid, (cash, gold, silver) in hist[off].items():
-        db.add(CustomerSnapshot(customer_id=cid, day=day, cash_balance=cash, gold_balance=gold, silver_balance=silver))
-        for m, b in (("cash", cash), ("gold", gold), ("silver", silver)):
-            if b > config.EPS[m]:
-                tot[f"{m}_receivable"] += b
-            elif b < -config.EPS[m]:
-                tot[f"{m}_payable"] += -b
-        if cash > 0.5 or gold > 0.001 or silver > 0.5:
-            tot["debtors"] += 1
-    db.add(Snapshot(day=day, **tot))
-db.commit()
-
-# --- follow-ups (peeche ki tareekhon mein) + promises
+total_debtors = 0
 KINDS = ["call", "whatsapp", "visit", "call", "call"]
 NOTES = ["Asked to wait until the shipment clears.", "Phone off, will retry tomorrow.", "Visited the shop, owner not in.",
          "Agreed to settle part of the balance.", "Disputes the last invoice, sending statement.", "Promised transfer this week.",
          "Reminder sent, customer acknowledged.", "Requested a statement of account."]
-for c in debtors[:20]:
-    owner = db.get(User, c.assigned_to) if c.assigned_to else admin
-    n = rnd.randint(1, 4)
-    for k in range(n):
-        off = rnd.randint(0, 12)
-        created = datetime.combine(today - timedelta(days=off), datetime.min.time()) + timedelta(hours=rnd.randint(8, 17), minutes=rnd.randint(0, 59))
-        promised = rnd.random() < 0.35
-        pdate = today + timedelta(days=rnd.randint(-6, 6)) if promised else None
-        status = None
-        if promised:
-            status = "pending" if pdate >= today or rnd.random() < 0.4 else rnd.choice(["kept", "broken", "kept"])
-        nxt = None
-        if k == n - 1 and rnd.random() < 0.7:  # aakhri entry par next follow-up
-            nxt = today + timedelta(days=rnd.randint(-5, 5))
-        db.add(Followup(
-            customer_id=c.id, user_id=owner.id, kind=rnd.choice(KINDS),
-            outcome="promised" if promised else rnd.choice(["reached", "no_answer", "refused", "other"]),
-            note=rnd.choice(NOTES), next_followup_date=nxt,
-            promise_date=pdate,
-            promise_gold=round(rnd.uniform(20, 300), 2) if promised and rnd.random() < 0.6 else None,
-            promise_cash=round(rnd.uniform(20_000, 400_000), 0) if promised else None,
-            promise_status=status, created_at=created))
-db.commit()
-print(f"Demo ready: {len(customers)} customers, {len(debtors)} debtors, history {DAYS} din. Logins: admin / ali / sara / omar (ali-pass-123 ...)")
+
+for ckey in svc_cos:
+    svc.sync_customers(db, ckey, force=True)
+    customers = svc.company_customers(db, ckey)
+    # sync ne aaj ka snapshot bana diya: is company ka saara snapshot saaf karke demo history daalo
+    db.execute(delete(CustomerSnapshot).where(CustomerSnapshot.customer_id.in_([c.id for c in customers])))
+    db.execute(delete(CompanySnapshot).where(CompanySnapshot.company == ckey))
+    db.commit()
+    debtors = sorted([c for c in customers if svc.is_debtor(c)], key=lambda c: -c.gold_balance)
+    total_debtors += len(debtors)
+    for i, c in enumerate(debtors):
+        c.assigned_to = None if i % 4 == 3 else collectors[i % 3].id
+    for c in debtors[5:7]:
+        c.status = "hold"
+    if len(debtors) > 3:
+        debtors[3].status = "legal"
+    db.commit()
+
+    state = {c.id: [c.cash_balance, c.gold_balance, c.silver_balance] for c in customers}
+    hist = {}
+    for off in range(0, DAYS + 1):
+        hist[off] = {cid: tuple(v) for cid, v in state.items()}
+        for cid, v in state.items():
+            r = rnd.random()
+            f = rnd.uniform(1.05, 1.35) if r < 0.22 else rnd.uniform(0.7, 0.95) if r < 0.34 else 1.0
+            for i in range(3):
+                v[i] = v[i] * f if abs(v[i]) > 1 else v[i]
+    for off in range(DAYS, -1, -1):
+        day = today - timedelta(days=off)
+        tot = {"cash_receivable": 0, "cash_payable": 0, "gold_receivable": 0, "gold_payable": 0,
+               "silver_receivable": 0, "silver_payable": 0, "debtors": 0}
+        for cid, (cash, gold, silver) in hist[off].items():
+            db.add(CustomerSnapshot(customer_id=cid, day=day, cash_balance=cash, gold_balance=gold, silver_balance=silver))
+            for m, b in (("cash", cash), ("gold", gold), ("silver", silver)):
+                if b > config.EPS[m]:
+                    tot[f"{m}_receivable"] += b
+                elif b < -config.EPS[m]:
+                    tot[f"{m}_payable"] += -b
+            if cash > 0.5 or gold > 0.001 or silver > 0.5:
+                tot["debtors"] += 1
+        db.add(CompanySnapshot(company=ckey, day=day, **tot))
+    db.commit()
+    for c in debtors[:20]:
+        owner = db.get(User, c.assigned_to) if c.assigned_to else admin
+        n = rnd.randint(1, 4)
+        for k in range(n):
+            off = rnd.randint(0, 12)
+            created = datetime.combine(today - timedelta(days=off), datetime.min.time()) + timedelta(hours=rnd.randint(8, 17), minutes=rnd.randint(0, 59))
+            promised = rnd.random() < 0.35
+            pdate = today + timedelta(days=rnd.randint(-6, 6)) if promised else None
+            status = None
+            if promised:
+                status = "pending" if pdate >= today or rnd.random() < 0.4 else rnd.choice(["kept", "broken", "kept"])
+            nxt = (today + timedelta(days=rnd.randint(-5, 5))) if (k == n - 1 and rnd.random() < 0.7) else None
+            db.add(Followup(
+                customer_id=c.id, user_id=owner.id, kind=rnd.choice(KINDS),
+                outcome="promised" if promised else rnd.choice(["reached", "no_answer", "refused", "other"]),
+                note=rnd.choice(NOTES), next_followup_date=nxt, promise_date=pdate,
+                promise_gold=round(rnd.uniform(20, 300), 2) if promised and rnd.random() < 0.6 else None,
+                promise_cash=round(rnd.uniform(20_000, 400_000), 0) if promised else None,
+                promise_status=status, created_at=created))
+    db.commit()
+print(f"Demo ready: companies {svc_cos}, {total_debtors} debtors, history {DAYS} din. Logins: admin / ali / sara / omar (ali-pass-123 ...)")

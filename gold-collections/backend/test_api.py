@@ -54,9 +54,10 @@ def run():
         assert gd and all(x["gold_balance"] > 0.001 for x in gd)
         owe = c.get("/api/customers?flt=we_owe", headers=H(adm)).json()["items"]
         assert all(min(x["gold_balance"], x["cash_balance"], x["silver_balance"]) < 0 for x in owe)
-        q = c.get("/api/customers?flt=all&q=NOOR", headers=H(adm)).json()["items"]
-        assert q and all("noor" in x["name"].lower() for x in q)
-        assert c.get("/api/customers?flt=all&q=" + "مجوهرات", headers=H(adm)).json()["total"] > 0
+        q = c.get("/api/customers?flt=all&q=" + "الركن", headers=H(adm)).json()["items"]
+        assert q and all("الركن" in x["name"] for x in q)
+        assert c.get("/api/customers?flt=all&q=purest", headers=H(adm)).json()["total"] > 0  # English bracket text
+        assert c.get("/api/customers?flt=all&q=11210001", headers=H(adm)).json()["total"] == 1
         assert c.post("/api/sync", headers=H(adm)).json()["synced"] is False  # < 30s throttle
 
         target = gd[0]["id"]
@@ -132,6 +133,18 @@ def run():
         assert "331110001" in k["missing_codes"]
         assert c.get("/api/kpi?from_date=bad&to_date=2026-01-01", headers=H(adm)).status_code == 422
 
+        # --- statement
+        sq = f"from_date={(t - timedelta(days=30)).isoformat()}&to_date={t.isoformat()}"
+        st = c.get(f"/api/customers/{target}/statement?{sq}", headers=H(adm)).json()
+        for mk, v in st["metals"].items():
+            assert abs(v["opening"] + v["debit"] - v["credit"] - v["closing"]) < 0.01, (mk, v)
+        assert st["metals"]["gold"]["closing"] > 0 and st["customer"]["code"]
+        assert c.get(f"/api/customers/{target}/statement?from_date={t.isoformat()}&to_date={(t - timedelta(days=1)).isoformat()}", headers=H(adm)).status_code == 400
+        assert c.get(f"/api/customers/999999/statement?{sq}", headers=H(adm)).status_code == 404
+        assert c.get(f"/api/customers/{target}/statement?{sq}").status_code == 401
+        rx = c.get(f"/api/customers/{target}/statement.xlsx?{sq}", headers=H(adm))
+        assert rx.status_code == 200 and load_workbook(io.BytesIO(rx.content)).active.max_row >= 9
+
         # --- export
         r = c.get("/api/customers/export.xlsx?flt=gold_debtors", headers=H(adm))
         assert r.status_code == 200 and r.headers["content-type"].startswith("application/vnd.openxml")
@@ -157,7 +170,7 @@ def run():
 
         # --- kal ka snapshot banao: target ka gold kal 1.5x tha => aaj 'paid down'
         from sqlalchemy import select
-        from db import Customer, CustomerSnapshot, SessionLocal, Snapshot
+        from db import CompanySnapshot, Customer, CustomerSnapshot, SessionLocal
         y = config.today() - timedelta(days=1)
         with SessionLocal() as db:
             tb = db.get(Customer, target).gold_balance
@@ -167,7 +180,8 @@ def run():
                 db.add(CustomerSnapshot(customer_id=cu.id, day=y, cash_balance=cu.cash_balance * m,
                                         gold_balance=cu.gold_balance * m, silver_balance=cu.silver_balance * m))
                 gold_rec += max(cu.gold_balance, 0)
-            db.add(Snapshot(day=y, gold_receivable=gold_rec - 100, debtors=0))
+            db.add(CompanySnapshot(company="swag", day=y, gold_receivable=gold_rec - 100, debtors=0))
+            ysnap_total = gold_rec
             db.commit()
         assert tb > 0
         ov1 = c.get("/api/overview", headers=H(adm)).json()
@@ -186,10 +200,10 @@ def run():
         import gerp
         import services
         orig = gerp.mock_customers
-        gerp.mock_customers = lambda: [x for x in orig() if x["id"] != target]
+        gerp.mock_customers = lambda d=None, i=0: [x for x in orig(d, i) if x["id"] + (i * 1_000_000) != target]
         try:
             with SessionLocal() as db:
-                services.sync_customers(db, force=True)
+                services.sync_customers(db, "swag", force=True)
                 cu = db.get(Customer, target)
                 assert cu.gold_balance == 0 and cu.cash_balance == 0 and cu.silver_balance == 0
                 snap = db.get(CustomerSnapshot, (target, config.today()))
@@ -197,7 +211,92 @@ def run():
         finally:
             gerp.mock_customers = orig
 
+    multi_company_tests()
+    migration_test()
     print("ALL BACKEND TESTS PASSED")
+
+
+def multi_company_tests():
+    from sqlalchemy import select as sel
+    with TestClient(app) as c:
+        adm = c.post("/api/auth/login", json={"username": "admin", "password": "admin12345"}).json()["token"]
+        comps = c.get("/api/companies", headers=H(adm)).json()
+        assert [x["key"] for x in comps] == ["swag", "laroche"] and all(set(x) == {"key", "name"} for x in comps)
+        assert c.get("/api/companies").status_code == 401
+        sw = c.get("/api/customers?flt=all&limit=100&company=swag", headers=H(adm)).json()
+        la = c.get("/api/customers?flt=all&limit=100&company=laroche", headers=H(adm)).json()
+        assert sw["total"] == 40 and la["total"] == 40
+        sw_ids = {x["id"] for x in sw["items"]}
+        la_ids = {x["id"] for x in la["items"]}
+        assert not (sw_ids & la_ids), "ids overlap across companies"
+        assert all(i < 1_000_000 for i in sw_ids) and all(1_000_000 <= i < 2_000_000 for i in la_ids)
+        assert all(x["company"] == "laroche" for x in la["items"])
+        assert sw["sync"]["company"] == "swag" and la["sync"]["company"] == "laroche"
+        assert c.get("/api/customers?company=nope", headers=H(adm)).status_code == 404
+        # totals alag
+        ov_s = c.get("/api/overview?company=swag", headers=H(adm)).json()
+        ov_l = c.get("/api/overview?company=laroche", headers=H(adm)).json()
+        assert ov_s["company"] == "swag" and ov_l["company"] == "laroche"
+        assert abs(ov_s["totals"]["gold_receivable"] - ov_l["totals"]["gold_receivable"]) > 1
+        assert ov_l["customers_total"] == 40 and ov_l["feed"] == [] and ov_l["promises_pending"] == 0, "swag activity leaked into laroche"
+        assert len(ov_l["trend"]) == 1
+        # followup on laroche customer stays in laroche
+        lid = next(x["id"] for x in la["items"] if x["gold_balance"] > 1)
+        assert c.post(f"/api/customers/{lid}/followups", headers=H(adm), json={"kind": "call", "outcome": "reached", "note": "x"}).status_code == 200
+        ov_l = c.get("/api/overview?company=laroche", headers=H(adm)).json()
+        ov_s = c.get("/api/overview?company=swag", headers=H(adm)).json()
+        assert len(ov_l["feed"]) == 1 and all(f["customer_id"] != lid for f in ov_s["feed"])
+        # customer detail + statement use their own company
+        d = c.get(f"/api/customers/{lid}", headers=H(adm)).json()
+        assert d["company"] == "laroche"
+        t0 = config.today()
+        st = c.get(f"/api/customers/{lid}/statement?from_date={(t0 - timedelta(days=30)).isoformat()}&to_date={t0.isoformat()}", headers=H(adm)).json()
+        assert st["company"] == "LAROUCHE" and abs(st["metals"]["gold"]["closing"] - d["gold_balance"]) < 0.01
+        # KPI per company
+        ks = c.get(f"/api/kpi?from_date=2026-01-01&to_date={t0.isoformat()}&company=swag", headers=H(adm)).json()
+        kl = c.get(f"/api/kpi?from_date=2026-01-01&to_date={t0.isoformat()}&company=laroche", headers=H(adm)).json()
+        assert ks["company"] == "swag" and kl["company"] == "laroche"
+        assert abs(kl["gold_grams"]["current"] - 11570.06 * 1.6) < 0.05 and abs(ks["gold_grams"]["current"] - 11570.06) < 0.05
+        # sync status/ttl independent
+        assert c.post("/api/sync?company=laroche", headers=H(adm)).json()["synced"] is False  # <30s throttle
+        # export
+        rx = c.get("/api/customers/export.xlsx?flt=all&company=laroche", headers=H(adm))
+        assert rx.status_code == 200 and "laroche" in rx.headers["content-disposition"]
+        assert load_workbook(io.BytesIO(rx.content)).active.max_row == 41
+        # my day scoped
+        md = c.get("/api/myday?scope=all&company=swag", headers=H(adm)).json()
+        assert all(x["id"] < 1_000_000 for x in md["followups"] + md["promises"] + md["unassigned_debtors"])
+
+
+def migration_test():
+    """Purana single-company DB (company column + company_snapshots nahi) => data safe, naya schema."""
+    import subprocess, sqlite3, sys
+    path = os.path.join(_tmp, "old.db")
+    cx = sqlite3.connect(path)
+    cx.executescript("""
+    CREATE TABLE users (id INTEGER PRIMARY KEY, username VARCHAR(64) UNIQUE, name VARCHAR(120), password_hash VARCHAR(255), role VARCHAR(16), active BOOLEAN, created_at DATETIME);
+    CREATE TABLE customers (id INTEGER PRIMARY KEY, code VARCHAR(64), name VARCHAR(255), name_ar VARCHAR(255), account_id INTEGER,
+      cash_debit FLOAT, cash_credit FLOAT, cash_balance FLOAT, gold_debit FLOAT, gold_credit FLOAT, gold_balance FLOAT,
+      silver_debit FLOAT, silver_credit FLOAT, silver_balance FLOAT, synced_at DATETIME, assigned_to INTEGER, status VARCHAR(16), notes TEXT);
+    CREATE TABLE snapshots (day DATE PRIMARY KEY, gold_receivable FLOAT, gold_payable FLOAT, cash_receivable FLOAT, cash_payable FLOAT,
+      silver_receivable FLOAT, silver_payable FLOAT, debtors INTEGER);
+    INSERT INTO customers (id, code, name, name_ar, gold_balance, status, notes) VALUES (17, '11210001', 'Old Customer', 'عميل قديم', 12.5, 'hold', 'keep me');
+    INSERT INTO snapshots VALUES ('2026-10-01', 100, 0, 5000, 0, 0, 0, 3);
+    """)
+    cx.commit(); cx.close()
+    code = (
+        "import os, sqlite3\n"
+        f"os.environ['DATABASE_URL']='sqlite:///{path}'; os.environ['GERP_MOCK']='1'\n"
+        "import db; db.init_db(); db.init_db()\n"  # do baar: idempotent
+        f"cx = sqlite3.connect('{path}')\n"
+        "row = cx.execute('select company, name, status, notes, gold_balance from customers where id=17').fetchone()\n"
+        "assert row == ('swag', 'Old Customer', 'hold', 'keep me', 12.5), row\n"
+        "snaps = cx.execute('select company, day, gold_receivable, debtors from company_snapshots').fetchall()\n"
+        "assert snaps == [('swag', '2026-10-01', 100.0, 3)], snaps\n"
+        "print('migration ok')\n"
+    )
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=os.path.dirname(os.path.abspath(__file__)))
+    assert r.returncode == 0 and "migration ok" in r.stdout, (r.stdout, r.stderr[-800:])
 
 
 def test_all():

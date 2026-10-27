@@ -75,6 +75,11 @@ const en = {
   recentActivity: "Recent activity", noActivity: "No follow-ups logged yet.",
   historyTitle: "Balance history", changeSince: "Change since",
   statusMix: "Debtors by status", assignedDebtors: "assigned", viewAll: "View all",
+  company: "Company", companyTotalNote: "Each company is a separate GERP database",
+  syncFailedBanner: "GERP sync failed — showing the last saved data (or nothing yet).", noSyncYet: "No data synced yet. Press Sync now.",
+  statementTitle: "Statement of account", statementBtn: "Statement", opening: "Opening", periodDebit: "Debit (period)", periodCredit: "Credit (period)",
+  closing: "Closing", downloadExcel: "Excel", printPdf: "Print / PDF", generate: "Generate", stmtNote: "Summary statement from GERP balances (opening → period movement → closing). Line-by-line entries are not available from the API.",
+  stmtOwes: "Customer owes us", stmtWeOwe: "We owe the customer", generatedAt: "Generated", period: "Period", statementFailed: "Could not build the statement",
 };
 
 const ar = {
@@ -142,6 +147,11 @@ const ar = {
   recentActivity: "آخر النشاط", noActivity: "لا توجد متابعات مسجّلة بعد.",
   historyTitle: "سجل الرصيد", changeSince: "التغيّر منذ",
   statusMix: "المدينون حسب الحالة", assignedDebtors: "معيّن", viewAll: "عرض الكل",
+  company: "الشركة", companyTotalNote: "كل شركة قاعدة بيانات GERP منفصلة",
+  syncFailedBanner: "فشلت مزامنة GERP — يتم عرض آخر بيانات محفوظة (أو لا شيء بعد).", noSyncYet: "لا توجد بيانات مزامنة بعد. اضغط مزامنة الآن.",
+  statementTitle: "كشف حساب", statementBtn: "كشف حساب", opening: "الافتتاحي", periodDebit: "مدين (الفترة)", periodCredit: "دائن (الفترة)",
+  closing: "الختامي", downloadExcel: "Excel", printPdf: "طباعة / PDF", generate: "عرض", stmtNote: "كشف ملخّص من أرصدة GERP (افتتاحي ← حركة الفترة ← ختامي). القيود التفصيلية غير متوفرة من الـ API.",
+  stmtOwes: "العميل مدين لنا", stmtWeOwe: "نحن مدينون للعميل", generatedAt: "تاريخ الإنشاء", period: "الفترة", statementFailed: "تعذّر إنشاء الكشف",
 };
 
 const dicts = { en, ar };

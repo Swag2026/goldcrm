@@ -17,7 +17,35 @@ export const addDays = (iso, n) => {
   d.setDate(d.getDate() + n);
   return d.toISOString().slice(0, 10);
 };
-export const custName = (c, isAr) => (isAr ? c.name_ar || c.name : c.name || c.name_ar) || c.code;
+// GERP naam Arabic hote hain, bracket mein trade name / English: "شركة ... ( معرض سواج جولد )".
+// Spaces theek karo, bracket wala hissa alag (chhoti muted line), aur bidi mix na ho.
+export const normName = (s) => String(s || "").replace(/\s+/g, " ").replace(/([(（])\s+/g, "$1").replace(/\s+([)）])/g, "$1").trim();
+export function splitName(raw) {
+  const n = normName(raw);
+  const m = n.match(/^(.*?)\s*[(（]([^()（）]+)[)）]\s*$/);
+  return m && m[1] ? { main: m[1].trim(), sub: m[2].trim() } : { main: n, sub: "" };
+}
+export const custName = (c, isAr) => normName(isAr ? c.name_ar || c.name : c.name || c.name_ar) || c.code || "";
+
+// stack: main naam (wrap hota hai, truncate nahi) + neeche bracket wala hissa. compact: ek line, truncate.
+export function CustName({ c, isAr, compact = false, clamp = false, className = "" }) {
+  const full = custName(c, isAr);
+  const { main, sub } = splitName(full);
+  if (compact || clamp) {
+    return (
+      <span className={`block ${clamp ? "line-clamp-2 break-words leading-snug" : "truncate"} ${className}`} title={full}>
+        <span className="[unicode-bidi:isolate]">{main}</span>
+        {sub && <span className="ms-1.5 text-[0.85em] font-normal text-dim [unicode-bidi:isolate]">({sub})</span>}
+      </span>
+    );
+  }
+  return (
+    <span className={`block ${className}`} title={full}>
+      <span className="block break-words leading-snug text-left rtl:text-right [unicode-bidi:plaintext]">{main}</span>
+      {sub && <span className="mt-0.5 block break-words text-left text-[11px] font-normal leading-tight text-dim rtl:text-right [unicode-bidi:plaintext]">{sub}</span>}
+    </span>
+  );
+}
 
 // Positive balance = customer owes us (red). Negative = we owe the customer (brand).
 export const balTone = (n, eps = 0.0005) => (n > eps ? "text-danger" : n < -eps ? "text-brand" : "text-faint");

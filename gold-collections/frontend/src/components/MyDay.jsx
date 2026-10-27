@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Check, CalendarClock, HandCoins, UserX, XCircle } from "lucide-react";
 import { api } from "../api.js";
 import { useI18n } from "../i18n.jsx";
-import { Bal, Badge, Btn, Card, Empty, ErrorBox, Spinner, custName, fmt, useApp } from "../ui.jsx";
+import { Bal, Badge, Btn, Card, Empty, ErrorBox, Spinner, CustName, fmt, useApp } from "../ui.jsx";
 
 function DueTag({ days }) {
   const { t } = useI18n();
@@ -16,7 +16,7 @@ function Row({ c, extra, onOpen }) {
     <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 last:border-0 hover:bg-hover">
       <button onClick={() => onOpen(c.id)} className="min-w-0 flex-1 text-start">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="truncate font-medium">{custName(c, isAr)}</span>
+          <span className="min-w-0 font-medium"><CustName c={c} isAr={isAr} compact /></span>
           {c.days_overdue !== undefined && <DueTag days={c.days_overdue} />}
         </div>
         <div className="mt-0.5 flex flex-wrap gap-x-4 text-xs text-faint">

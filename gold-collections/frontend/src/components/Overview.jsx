@@ -4,7 +4,7 @@ import { CalendarClock, HandCoins, HelpCircle, History, MapPin, MessageCircle, P
 import { api } from "../api.js";
 import { useI18n } from "../i18n.jsx";
 import {
-  Badge, Btn, CountUp, DeltaChip, Empty, ErrorBox, Pills, Sparkline, Spinner, Tile, custName, fmt, useApp,
+  Badge, Btn, CountUp, DeltaChip, Empty, ErrorBox, Pills, Sparkline, Spinner, Tile, CustName, custName, fmt, useApp,
 } from "../ui.jsx";
 
 const tip = {
@@ -53,7 +53,7 @@ function TopBars({ rows, unit, digits = 0, color, onPick, isAr }) {
             <div className="flex items-baseline justify-between gap-3 text-xs">
               <span className="flex min-w-0 items-center gap-2">
                 <span className="w-4 shrink-0 text-[10px] font-bold text-faint">{i + 1}</span>
-                <span className="truncate font-medium group-hover:text-brand">{(isAr ? r.name_ar : r.name) || "—"}</span>
+                <span className="min-w-0 flex-1 font-medium group-hover:text-brand"><CustName c={r} isAr={isAr} clamp /></span>
               </span>
               <span className="shrink-0 font-semibold tabular-nums" dir="ltr">{fmt(r.value, digits)}{unit && ` ${unit}`}</span>
             </div>
@@ -72,7 +72,7 @@ function ListRow({ c, isAr, onOpen, tag, right, action }) {
   return (
     <div className="flex items-center gap-3 border-b border-line px-5 py-2.5 last:border-0 hover:bg-hover">
       <button onClick={() => onOpen(c.id)} className="min-w-0 flex-1 text-start">
-        <div className="truncate text-sm font-medium">{custName(c, isAr)}</div>
+        <CustName c={c} isAr={isAr} compact className="text-sm font-medium" />
         <div className="mt-0.5 flex flex-wrap items-center gap-1.5">{tag}</div>
       </button>
       <div className="text-end text-xs tabular-nums" dir="ltr">{right}</div>
@@ -151,7 +151,7 @@ function Movers({ d, isAr, t, openCustomer }) {
       <div className={`mb-1 text-[11px] font-semibold uppercase tracking-wide ${down ? "text-ok" : "text-danger"}`}>{down ? "▼" : "▲"} {title}</div>
       {rows.length === 0 ? <div className="py-3 text-xs text-faint">—</div> : rows.map((r) => (
         <button key={r.id} onClick={() => openCustomer(r.id)} className="flex w-full items-center justify-between gap-2 rounded-md px-1.5 py-1.5 text-start hover:bg-hover">
-          <span className="truncate text-xs font-medium">{custName(r, isAr)}</span>
+          <span className="min-w-0 flex-1 text-xs font-medium"><CustName c={r} isAr={isAr} clamp /></span>
           <span className={`shrink-0 text-xs font-semibold tabular-nums ${down ? "text-ok" : "text-danger"}`} dir="ltr">
             {r.delta > 0 ? "+" : ""}{fmt(r.delta, digits)}{unit && ` ${unit}`}
           </span>
@@ -175,7 +175,7 @@ function Movers({ d, isAr, t, openCustomer }) {
 // ------------------------------------------------------------------ page
 export default function Overview() {
   const { t, isAr } = useI18n();
-  const { user, openCustomer, version, bump, toast } = useApp();
+  const { user, company, companies, openCustomer, version, bump, toast } = useApp();
   const [d, setD] = useState(null);
   const [err, setErr] = useState("");
   const [syncing, setSyncing] = useState(false);
@@ -218,6 +218,7 @@ export default function Overview() {
           <h1 className="text-2xl font-bold">{greet}, <span className="text-brand">{user.name}</span></h1>
           <p className="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-dim">
             {dateStr} · {t("overviewSub")}
+            {companies.length > 1 && <Badge tone="brand">{companies.find((c) => c.key === company)?.name}</Badge>}
             {d.sync?.mock && <Badge tone="warn">{t("demoData")}</Badge>}
           </p>
         </div>
@@ -329,7 +330,7 @@ export default function Overview() {
                   <li key={r.id + "-" + i} className="flex items-center justify-between gap-2 text-xs">
                     <span className="flex min-w-0 items-center gap-2">
                       <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: r.id === 0 ? "var(--border)" : GOLD_SHADES[i % GOLD_SHADES.length] }} />
-                      <span className="truncate">{r.id === 0 ? t("others") : (isAr ? r.name_ar : r.name)}</span>
+                      <span className="min-w-0 flex-1">{r.id === 0 ? t("others") : <CustName c={r} isAr={isAr} clamp />}</span>
                     </span>
                     <span className="tabular-nums text-dim" dir="ltr">{fmt(r.value, 0)} g</span>
                   </li>
@@ -405,7 +406,7 @@ export default function Overview() {
                 className="flex w-full items-center gap-3 border-t border-line px-5 py-2.5 text-start hover:bg-hover">
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand"><Icon size={13} /></span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">{custName(f, isAr)}</span>
+                  <CustName c={f} isAr={isAr} compact className="text-sm font-medium" />
                   <span className="block truncate text-[11px] text-faint">{f.user_name} · {t(KIND_KEY[f.kind])} · <span dir="ltr">{f.created_at.slice(5, 16).replace("T", " ")}</span></span>
                 </span>
                 <Badge tone={OUT_TONE[f.outcome]}>{t(OUT_KEY[f.outcome])}</Badge>

@@ -8,13 +8,52 @@ def env(key: str, default: str = "") -> str:
     return os.getenv(key, default)
 
 
-GERP_BASE = env("GERP_BASE", "https://swag.gerpsystems.com/external").rstrip("/")
-GERP_USERNAME = env("GERP_USERNAME")
-GERP_PASSWORD = env("GERP_PASSWORD")
-GERP_BRANCHES = [int(x) for x in env("GERP_BRANCHES", "1,2").split(",") if x.strip()]
+import json
+
+MOCK = env("GERP_MOCK") == "1"
 GERP_CONVERT = int(env("GERP_CONVERT", "2"))
 GERP_CURRENCY = int(env("GERP_CURRENCY", "1"))
-MOCK = env("GERP_MOCK") == "1"
+
+
+def _load_companies() -> list:
+    """Companies (alag GERP databases). JSON env GERP_COMPANIES:
+    [{"key":"swag","name":"SWAG","base":"https://swag.gerpsystems.com/external","username":"external","password":"...","branches":[1,2]},
+     {"key":"laroche","name":"LAROUCHE","base":"https://laroche.gerpsystems.com/external","username":"external","password":"...","branches":[1]}]
+    Order BADLO MAT (naye sirf end mein jodo): customer id offset = index * 1_000_000 (ya explicit "offset")."""
+    raw = env("GERP_COMPANIES").strip()
+    if raw:
+        items = json.loads(raw)
+    elif MOCK:
+        items = [{"key": "swag", "name": "SWAG", "branches": [1, 2]}, {"key": "laroche", "name": "LAROUCHE", "branches": [1]}]
+    else:  # purana single-company setup (backward compatible)
+        items = [{"key": "swag", "name": "SWAG", "base": env("GERP_BASE", "https://swag.gerpsystems.com/external"),
+                  "username": env("GERP_USERNAME"), "password": env("GERP_PASSWORD"),
+                  "branches": [int(x) for x in env("GERP_BRANCHES", "1,2").split(",") if x.strip()]}]
+    out = []
+    for i, it in enumerate(items):
+        key = str(it["key"]).strip().lower()
+        if any(c["key"] == key for c in out):
+            raise ValueError(f"duplicate company key: {key}")
+        out.append({
+            "key": key, "name": it.get("name") or key.upper(), "index": i,
+            "offset": int(it.get("offset", i * 1_000_000)),
+            "base": str(it.get("base", "")).rstrip("/"),
+            "username": it.get("username", ""), "password": it.get("password", ""),
+            "branches": [int(x) for x in it.get("branches", [1])],
+            "convert": int(it.get("convert", GERP_CONVERT)), "currency": int(it.get("currency", GERP_CURRENCY)),
+            "mock": MOCK,
+        })
+    return out
+
+
+COMPANIES = _load_companies()
+DEFAULT_COMPANY = COMPANIES[0]["key"]
+
+
+def company(key=None):
+    key = (key or DEFAULT_COMPANY).strip().lower()
+    return next((c for c in COMPANIES if c["key"] == key), None)
+
 
 SYNC_TTL_SECONDS = int(env("SYNC_TTL_SECONDS", "600"))
 

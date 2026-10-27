@@ -31,9 +31,10 @@ class User(Base):
 
 
 class Customer(Base):
-    """GERP customer + latest balance snapshot. id = GERP customer id."""
+    """GERP customer + latest balance snapshot. id = company offset + GERP customer id (alag databases mein ids overlap karte hain)."""
     __tablename__ = "customers"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)  # = company offset + GERP id
+    company: Mapped[str] = mapped_column(String(32), index=True, default="swag")
     code: Mapped[str] = mapped_column(String(64), index=True, default="")
     name: Mapped[str] = mapped_column(String(255), default="")
     name_ar: Mapped[str] = mapped_column(String(255), default="")
@@ -101,6 +102,20 @@ class Snapshot(Base):
     debtors: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class CompanySnapshot(Base):
+    """Company ka roz ka total (trend chart ke liye). Purani `snapshots` table (sirf swag) ka replacement."""
+    __tablename__ = "company_snapshots"
+    company: Mapped[str] = mapped_column(String(32), primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    gold_receivable: Mapped[float] = mapped_column(Float, default=0)
+    gold_payable: Mapped[float] = mapped_column(Float, default=0)
+    cash_receivable: Mapped[float] = mapped_column(Float, default=0)
+    cash_payable: Mapped[float] = mapped_column(Float, default=0)
+    silver_receivable: Mapped[float] = mapped_column(Float, default=0)
+    silver_payable: Mapped[float] = mapped_column(Float, default=0)
+    debtors: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class Meta(Base):
     __tablename__ = "meta"
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -109,6 +124,27 @@ class Meta(Base):
 
 def init_db():
     Base.metadata.create_all(engine)
+    _migrate()
+
+
+def _migrate():
+    """Purane (single-company) database ko bina data khoye naye schema par laata hai. Idempotent."""
+    from sqlalchemy import inspect, text
+    insp = inspect(engine)
+    tables = set(insp.get_table_names())
+    with engine.begin() as cx:
+        if "customers" in tables and "company" not in {c["name"] for c in insp.get_columns("customers")}:
+            cx.execute(text("ALTER TABLE customers ADD COLUMN company VARCHAR(32) NOT NULL DEFAULT 'swag'"))
+            cx.execute(text("CREATE INDEX IF NOT EXISTS ix_customers_company ON customers (company)"))
+        # purani snapshots (company nahi thi) => pehli company ke naam se copy, sirf ek baar
+        if "snapshots" in tables:
+            n = cx.execute(text("SELECT COUNT(*) FROM company_snapshots")).scalar()
+            if not n:
+                cx.execute(text(
+                    "INSERT INTO company_snapshots (company, day, gold_receivable, gold_payable, cash_receivable, cash_payable, "
+                    "silver_receivable, silver_payable, debtors) "
+                    "SELECT :c, day, gold_receivable, gold_payable, cash_receivable, cash_payable, silver_receivable, "
+                    "silver_payable, debtors FROM snapshots"), {"c": config.DEFAULT_COMPANY})
 
 
 def get_db():
