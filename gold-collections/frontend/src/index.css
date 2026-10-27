@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* Palette crmswag1 jaisa (indigo + dark sidebar), gold accent upar se */
+:root {
+  --bg: #f7f3f6;
+  --sidebar-bg: #211c3d;
+  --panel: #ffffff;
+  --card: #f9f5f8;
+  --card-hover: #f2e9ef;
+  --border: #ece2e8;
+  --text: #1c2233;
+  --text-dim: #6b7280;
+  --text-faint: #9ca3af;
+  --primary: #5750f1;
+  --primary-dark: #433cc9;
+  --accent: #7a74f5;
+  --danger: #e0294b;
+  --danger-soft: #fdecef;
+  --warn: #d9720a;
+  --warn-soft: #fdf1e2;
+  --ok: #17974a;
+  --ok-soft: #e9f8ef;
+  --gold: #b8860b;
+  --gold-soft: #fbf3dc;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-md: 0 4px 14px rgba(16, 24, 40, 0.06);
+}
+
+[data-theme="dark"] {
+  --bg: #000000;
+  --sidebar-bg: #16132a;
+  --panel: #0a0a0c;
+  --card: #17171a;
+  --card-hover: #202023;
+  --border: #262629;
+  --text: #f2f2f4;
+  --text-dim: #9a9aa2;
+  --text-faint: #6c6c74;
+  --primary: #8a84f8;
+  --primary-dark: #a5a0fa;
+  --accent: #9d97f9;
+  --danger: #f1495f;
+  --danger-soft: #3a1420;
+  --warn: #f0a63f;
+  --warn-soft: #3a2c12;
+  --ok: #35c977;
+  --ok-soft: #0f3322;
+  --gold: #e3b341;
+  --gold-soft: #33290d;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 18px rgba(0, 0, 0, 0.55);
+}
+
+@theme inline {
+  --color-app: var(--bg);
+  --color-side: var(--sidebar-bg);
+  --color-panel: var(--panel);
+  --color-card: var(--card);
+  --color-hover: var(--card-hover);
+  --color-line: var(--border);
+  --color-ink: var(--text);
+  --color-dim: var(--text-dim);
+  --color-faint: var(--text-faint);
+  --color-brand: var(--primary);
+  --color-brand-dark: var(--primary-dark);
+  --color-accent: var(--accent);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-gold: var(--gold);
+  --color-gold-soft: var(--gold-soft);
+  --shadow-card: var(--shadow);
+  --shadow-pop: var(--shadow-md);
+  --font-sans: "IBM Plex Sans", "IBM Plex Sans Arabic", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+button, a, input, select, textarea { transition: background .15s, border-color .15s, color .15s, box-shadow .15s, opacity .15s; }
+button { cursor: pointer; font-family: inherit; }
+input, select, textarea { font-family: inherit; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
+[data-theme="dark"] .side-bg {
+  background:
+    radial-gradient(420px 220px at 15% -8%, #5750f122, transparent 60%),
+    linear-gradient(180deg, #14111f 0%, #0b0a12 78%, #050406 100%);
+}
+
+@keyframes slide-in-end { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+[dir="rtl"] .drawer-anim { animation-name: slide-in-start; }
+@keyframes slide-in-start { from { transform: translateX(-24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.drawer-anim { animation: slide-in-end .18s ease-out; }
