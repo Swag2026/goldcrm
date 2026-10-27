@@ -276,3 +276,122 @@ def _mock_account_row(co: dict, code: str, from_date: date, to_date: date) -> Op
         opening[col] = g_ob * k
         period[col] = {"debit": g_deb * k, "credit": g_cre * k, "net": (g_deb - g_cre) * k}
     return {"account_code": code, "opening": opening, "period": period}
+
+
+# ------------------------------------------------------------------ ledger (line-by-line)
+# Format GERP web `statement-of-accounts` response se liya gaya:
+# {"status":"ok","data":{"data":[{date, voucher_no, note_type_name(_ar), remark_english, debit, credit, balance,
+#   debit_18.., credit_18.., balance_18.. (21/22/24/silver/platinum/palladium)}], "debit_total", "credit_total", "balance_total",
+#   "debit_total24".., "cash_balance": "5,655,108.82", "gold_balance": "-13,000.00", ...}}
+METAL_KEYS = ("18", "21", "22", "24", "silver", "platinum", "palladium")
+_TOTAL_SUFFIX = {"18": "18", "21": "21", "22": "22", "24": "24", "silver": "Silver", "platinum": "Platinum", "palladium": "Palladium"}
+
+
+def _money(v) -> float:
+    if isinstance(v, str):
+        v = v.replace(",", "").strip()
+    return _f(v)
+
+
+def normalize_ledger(raw: dict) -> dict:
+    d = raw.get("data") if isinstance(raw, dict) else None
+    body = d if isinstance(d, dict) else {"data": d or []}
+    lines = []
+    for r in body.get("data") or []:
+        lines.append({
+            "index": r.get("index"), "date": r.get("date"), "voucher_no": r.get("voucher_no") or "",
+            "type": r.get("note_type_name") or "", "type_ar": (r.get("note_type_name_ar") or "").strip(),
+            "type_id": r.get("note_type_id"),
+            "remarks": (r.get("remark_english") or r.get("remark") or "").strip(),
+            "debit": _f(r.get("debit")), "credit": _f(r.get("credit")), "balance": _f(r.get("balance")),
+            "metals": {k: {"debit": _f(r.get(f"debit_{k}")), "credit": _f(r.get(f"credit_{k}")), "balance": _f(r.get(f"balance_{k}"))}
+                       for k in METAL_KEYS},
+        })
+    totals = {"cash": {
+        "debit": _f(body["debit_total"]) if "debit_total" in body else round(sum(l["debit"] for l in lines), 4),
+        "credit": _f(body["credit_total"]) if "credit_total" in body else round(sum(l["credit"] for l in lines), 4),
+        "balance": _f(body["balance_total"]) if "balance_total" in body else (lines[-1]["balance"] if lines else 0.0)}}
+    for k in METAL_KEYS:
+        s = _TOTAL_SUFFIX[k]
+        totals[k] = {
+            "debit": _f(body[f"debit_total{s}"]) if f"debit_total{s}" in body else round(sum(l["metals"][k]["debit"] for l in lines), 4),
+            "credit": _f(body[f"credit_total{s}"]) if f"credit_total{s}" in body else round(sum(l["metals"][k]["credit"] for l in lines), 4),
+            "balance": _f(body[f"balance_total{s}"]) if f"balance_total{s}" in body else (lines[-1]["metals"][k]["balance"] if lines else 0.0)}
+    active = [k for k in METAL_KEYS if any(abs(totals[k][x]) > 1e-9 for x in ("debit", "credit", "balance"))
+              or any(abs(l["metals"][k][x]) > 1e-9 for l in lines for x in ("debit", "credit"))]
+    seen, types = set(), []
+    for l in lines:
+        if l["type"] and l["type"] not in seen:
+            seen.add(l["type"]); types.append({"name": l["type"], "name_ar": l["type_ar"]})
+    closing = {"cash": _money(body["cash_balance"]) if "cash_balance" in body else totals["cash"]["balance"],
+               "gold": _money(body["gold_balance"]) if "gold_balance" in body else totals["24"]["balance"],
+               "silver": _money(body["silver_balance"]) if "silver_balance" in body else totals["silver"]["balance"]}
+    return {"lines": lines, "totals": totals, "active_metals": active, "types": types, "closing": closing}
+
+
+def customer_ledger(co: dict, code: str, from_date: date, to_date: date) -> dict:
+    if co["mock"]:
+        raw = _mock_ledger(co, code, from_date, to_date)
+    else:
+        path = co.get("ledger_path") or "/account-statement"
+        payload = {"branches": co["branches"], "account_code": str(code), "from_date": from_date.isoformat(),
+                   "to_date": to_date.isoformat(), "currency": co["currency"], "convert": co["convert"], "with_opening": True}
+        tok = _get_token(co)
+        r = requests.post(f"{co['base']}{path}", json=payload, timeout=120,
+                          headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
+        if r.status_code == 401:
+            r = requests.post(f"{co['base']}{path}", json=payload, timeout=120,
+                              headers={"Authorization": f"Bearer {_get_token(co, force=True)}", "Content-Type": "application/json"})
+        if r.status_code in (404, 405):
+            raise HTTPException(501, "Ledger endpoint GERP API mein abhi available nahi hai (GERP developer se maango)")
+        if not r.ok:
+            raise HTTPException(502, f"{co['name']}: GERP ledger error {r.status_code}: {r.text[:200]}")
+        raw = r.json()
+        if raw.get("status") not in (None, "ok"):
+            raise HTTPException(400, f"{co['name']}: GERP: {str(raw)[:200]}")
+    return normalize_ledger(raw)
+
+
+def _mock_ledger(co: dict, code: str, from_date: date, to_date: date) -> dict:
+    """Demo ledger: customer ke closing balance par khatam hone wali synthetic lines (asli data nahi)."""
+    from datetime import timedelta
+    close = next((r for r in mock_customers(to_date, co["index"]) if str(r["customer_code"]) == str(code)), None)
+    if close is None:
+        return {"data": {"data": []}}
+    rnd = random.Random(int(str(code)[-6:] or 1) + co["index"] * 7)
+    span = max((to_date - from_date).days, 1)
+    kinds = [("CREDIT SALES", "مبيعات آجلة", "d"), ("CASH RECEIPT", "سند قبض", "c"), ("METAL PAYMENTS", "صرف معادن", "dm"),
+             ("METAL RECEIPTS", "قبض المعادن", "cm"), ("JV ENTRY", "قيد يومية", "d"), ("CASH PAYMENT", "سند صرف", "d")]
+    target_cash = _f(close["cash_debit"]) - _f(close["cash_credit"])
+    target_gold = _f(close["gold_debit"]) - _f(close["gold_credit"])
+    n = 22
+    rows, cash_bal, gold_bal = [], 0.0, 0.0
+    days = sorted(rnd.randrange(span + 1) for _ in range(n))
+    for i, off in enumerate(days, 1):
+        name, name_ar, kind = rnd.choice(kinds)
+        last = i == n
+        debit = credit = g_deb = g_cre = 0.0
+        if kind == "d":
+            debit = round(rnd.uniform(20_000, 900_000), 2)
+        elif kind == "c":
+            credit = round(rnd.uniform(20_000, 900_000), 2)
+        elif kind == "dm":
+            g_deb = round(rnd.uniform(50, 900), 2)
+        else:
+            g_cre = round(rnd.uniform(50, 900), 2)
+        if last:  # closing se match
+            need_c = target_cash - cash_bal
+            need_g = target_gold - gold_bal
+            debit, credit = (round(need_c, 2), 0.0) if need_c >= 0 else (0.0, round(-need_c, 2))
+            g_deb, g_cre = (round(need_g, 4), 0.0) if need_g >= 0 else (0.0, round(-need_g, 4))
+            name, name_ar = "JV ENTRY", "قيد يومية"
+        cash_bal += debit - credit
+        gold_bal += g_deb - g_cre
+        row = {"index": i, "date": (from_date + timedelta(days=off)).isoformat(), "voucher_no": f"{name.split()[0][:2]}126SJ{rnd.randrange(100000):06d}",
+               "note_type_id": 100 + i % 9, "note_type_name": name, "note_type_name_ar": name_ar,
+               "remark_english": "demo " + name.lower(), "debit": debit, "credit": credit, "balance": round(cash_bal, 2)}
+        for k in METAL_KEYS:
+            row.update({f"debit_{k}": 0, f"credit_{k}": 0, f"balance_{k}": 0})
+        row.update({"debit_24": g_deb, "credit_24": g_cre, "balance_24": round(gold_bal, 4)})
+        rows.append(row)
+    return {"status": "ok", "data": {"data": rows, "cash_balance": f"{cash_bal:,.2f}", "gold_balance": f"{gold_bal:,.2f}", "silver_balance": "0.00"}}

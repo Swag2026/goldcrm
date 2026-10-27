@@ -25,8 +25,8 @@ function BalanceCard({ title, unit, digits, debit, credit, balance, delta }) {
       </div>
       <DeltaMini value={delta} balance={balance} digits={digits} />
       <div className="mt-1.5 space-y-0.5 text-[11px] text-faint" dir="ltr">
-        <div>{t("debit")}: {fmt(debit, digits)}</div>
-        <div>{t("credit")}: {fmt(credit, digits)}</div>
+        <div className="flex justify-between gap-2"><span>{t("debit")}</span><span className="tabular-nums">{fmt(debit, digits)}</span></div>
+        <div className="flex justify-between gap-2"><span>{t("credit")}</span><span className="tabular-nums">{fmt(credit, digits)}</span></div>
       </div>
     </div>
   );
@@ -123,9 +123,10 @@ export default function CustomerDrawer({ id, onClose }) {
                 <h3 className="mb-2 text-sm font-semibold">{t("balances")}</h3>
                 <div className="grid grid-cols-3 gap-2.5">
                   <BalanceCard title={t("gold")} unit={t("grams")} digits={2} debit={c.gold_debit} credit={c.gold_credit} balance={c.gold_balance} delta={c.delta?.gold} />
-                  <BalanceCard title={t("cash")} unit="" digits={0} debit={c.cash_debit} credit={c.cash_credit} balance={c.cash_balance} delta={c.delta?.cash} />
+                  <BalanceCard title={`${t("cash")} (${t("sar")})`} unit="" digits={0} debit={c.cash_debit} credit={c.cash_credit} balance={c.cash_balance} delta={c.delta?.cash} />
                   <BalanceCard title={t("silver")} unit={t("grams")} digits={0} debit={c.silver_debit} credit={c.silver_credit} balance={c.silver_balance} delta={c.delta?.silver} />
                 </div>
+                <p className="mt-2 text-[11px] leading-snug text-faint">{t("balHelp")}</p>
               </section>
 
               {/* contact */}

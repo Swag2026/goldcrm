@@ -88,3 +88,13 @@ Line-by-line statement (jaisa GERP ka PDF) ke liye GERP vendor se "account state
 ## Wording (balance ka matlab)
 Balance = Debit - Credit. **Positive = To receive** (customer ne humein dena hai, laal). **Negative = To pay** (humein customer ko dena hai, neela). 0 = Settled.
 Customer drawer ke balance cards par bhi ye word likha aata hai.
+
+## Ledger (line-by-line statement)
+Statement modal mein **Summary | Ledger** tabs. Ledger = GERP ke web `statement-of-accounts` response ke format mein har line (date, voucher, type EN/AR, remarks,
+debit/credit/running balance SAR + har carat 18/21/22/24, silver, platinum, palladium), type filter, search, totals, Excel, aur GERP jaisa landscape Print/PDF.
+Response format (asli GERP web response se): `{"status":"ok","data":{"data":[{date, voucher_no, note_type_name, note_type_name_ar, remark_english, debit, credit, balance, debit_24, credit_24, balance_24, ...}], "debit_total", "credit_total", "balance_total", "debit_total24"..., "cash_balance":"5,655,108.82", "gold_balance":"-13,000.00"}}`.
+- Backend `gerp.customer_ledger()` abhi official endpoint `POST {base}/account-statement` bulata hai (company config mein `ledger_path` se badal sakte ho)
+  payload: `{branches, account_code, from_date, to_date, currency, convert, with_opening}`. Jab tak GERP API mein ye endpoint nahi hota, Ledger tab "not available yet" dikhata hai (501).
+- GERP developer se maango ki `statement-of-accounts` web wali response external API mein bhi expose kare (same JSON); phir yeh tab seedha chalega. Payload/path alag ho to `gerp.customer_ledger()` mein ek jagah badalna hai.
+- Ledger ka closing last sync se alag ho (nayi entry post hui) to "press Sync now" warning aati hai.
+- Demo/mock mode mein synthetic ledger banta hai (asli data repo mein nahi hai).

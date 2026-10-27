@@ -317,6 +317,74 @@ async def import_report(request: Request, company: str = "", force: bool = False
     return {**res, "company": company}
 
 
+def _ledger(cid, from_date, to_date, db):
+    if from_date > to_date:
+        raise HTTPException(400, "from_date to_date se pehle honi chahiye")
+    if (to_date - from_date).days > 800:
+        raise HTTPException(400, "Range bahut lambi hai (max ~2 saal)")
+    c = db.get(Customer, cid)
+    if not c:
+        raise HTTPException(404, "Customer not found")
+    co = svc.get_co(c.company)
+    led = gerp.customer_ledger(co, c.code, from_date, to_date)
+    led["customer"] = {"id": cid, "code": c.code, "name": c.name, "name_ar": c.name_ar}
+    led["company"] = co["name"]
+    led["company_info"] = {"name": co["name"], "legal_name": co["legal_name"], "legal_name_en": co["legal_name_en"],
+                           "vat": co["vat"], "address": co["address"], "address_en": co["address_en"]}
+    led["from_date"], led["to_date"] = from_date.isoformat(), to_date.isoformat()
+    led["generated_at"] = config.now().isoformat(timespec="minutes")
+    # last sync (customers table) se closing ka farq: nayi entry post hui ho to yahan dikhega
+    led["vs_synced"] = {"cash": round(led["closing"]["cash"] - c.cash_balance, 4), "gold": round(led["closing"]["gold"] - c.gold_balance, 4),
+                        "synced_at": c.synced_at.isoformat(timespec="minutes") if c.synced_at else None}
+    return led
+
+
+@app.get("/api/customers/{cid}/ledger")
+def customer_ledger_view(cid: int, from_date: date, to_date: date, _: User = Depends(current_user), db: Session = Depends(get_db)):
+    return _ledger(cid, from_date, to_date, db)
+
+
+@app.get("/api/customers/{cid}/ledger.xlsx")
+def customer_ledger_xlsx(cid: int, from_date: date, to_date: date, _: User = Depends(current_user), db: Session = Depends(get_db)):
+    led = _ledger(cid, from_date, to_date, db)
+    metals = led["active_metals"]
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Ledger"
+    ws.append(["Statement of account - ledger"])
+    ws["A1"].font = Font(bold=True, size=14)
+    ws.append(["Customer", led["customer"]["name"] or led["customer"]["name_ar"], led["customer"]["name_ar"] or "", "Code", led["customer"]["code"]])
+    ws.append(["Period", f'{led["from_date"]} -> {led["to_date"]}', "", "Company", led["company"]])
+    ws.append([])
+    head = ["#", "Date", "Voucher", "Type", "Type (AR)", "Remarks", "Debit", "Credit", "Balance (SAR)"]
+    for k in metals:
+        label = k.upper() if k in ("silver", "platinum", "palladium") else f"{k}K"
+        head += [f"{label} Debit", f"{label} Credit", f"{label} Balance"]
+    ws.append(head)
+    for cell in ws[ws.max_row]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="5750F1")
+    for l in led["lines"]:
+        row = [l["index"], l["date"], l["voucher_no"], l["type"], l["type_ar"], l["remarks"], l["debit"], l["credit"], l["balance"]]
+        for k in metals:
+            row += [l["metals"][k]["debit"], l["metals"][k]["credit"], l["metals"][k]["balance"]]
+        ws.append(row)
+    tot = ["", "", "", "", "", "Total", led["totals"]["cash"]["debit"], led["totals"]["cash"]["credit"], led["totals"]["cash"]["balance"]]
+    for k in metals:
+        tot += [led["totals"][k]["debit"], led["totals"][k]["credit"], led["totals"][k]["balance"]]
+    ws.append(tot)
+    for cell in ws[ws.max_row]:
+        cell.font = Font(bold=True)
+    ws.freeze_panes = ws.cell(row=6, column=1)
+    for i, w in enumerate([5, 12, 16, 22, 18, 40, 16, 16, 16] + [14] * (3 * len(metals)), start=1):
+        ws.column_dimensions[ws.cell(row=5, column=i).column_letter].width = w
+    buf = io.BytesIO()
+    wb.save(buf)
+    name = f'ledger-{led["customer"]["code"]}-{led["to_date"]}.xlsx'
+    return Response(buf.getvalue(), headers={"Content-Disposition": f'attachment; filename="{name}"'},
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
 class AssignIn(BaseModel):
     ids: List[int]
     user_id: Optional[int] = None

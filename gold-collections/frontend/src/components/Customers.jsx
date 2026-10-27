@@ -159,7 +159,7 @@ export default function Customers() {
                   {isAdmin && <th className="w-10 px-3"><input type="checkbox" checked={allSelected} onChange={toggleAll} /></th>}
                   <Th k="name">{t("customer")}</Th>
                   <Th k="gold" className="text-end">{t("gold")}</Th>
-                  <Th k="cash">{t("cash")}</Th>
+                  <Th k="cash">{t("cash")} ({t("sar")})</Th>
                   <Th k="silver">{t("silver")}</Th>
                   <Th>{t("assignedTo")}</Th>
                   <Th>{t("status")}</Th>

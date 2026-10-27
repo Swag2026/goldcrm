@@ -83,6 +83,18 @@ export const api = {
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   },
+  ledger: (id, params) => request(`/api/customers/${id}/ledger?${qs(params)}`),
+  ledgerXlsx: async (id, params, filename) => {
+    const res = await request(`/api/customers/${id}/ledger.xlsx?${qs(params)}`, { raw: true });
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  },
   collectors: () => request("/api/collectors"),
   users: () => request("/api/users"),
   createUser: (body) => request("/api/users", { method: "POST", body }),

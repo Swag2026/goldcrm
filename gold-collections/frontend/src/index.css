@@ -53,6 +53,16 @@
   --shadow-md: 0 4px 18px rgba(0, 0, 0, 0.55);
 }
 
+/* Animated sidebar tokens: sidebar always dark (bg-side), so map shadcn names to it */
+@theme {
+  --color-background: var(--sidebar-bg);
+  --color-foreground: #ffffff;
+  --color-muted: rgb(255 255 255 / 0.14);
+  --color-muted-foreground: rgb(255 255 255 / 0.62);
+  --color-border: rgb(255 255 255 / 0.1);
+  --color-ring: #a5a0fa;
+}
+
 @theme inline {
   --color-app: var(--bg);
   --color-side: var(--sidebar-bg);

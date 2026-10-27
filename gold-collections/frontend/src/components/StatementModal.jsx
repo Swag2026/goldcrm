@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Download, Printer } from "lucide-react";
 import { api } from "../api.js";
 import { useI18n } from "../i18n.jsx";
+import LedgerView from "./LedgerView.jsx";
 import { Btn, CustName, ErrorBox, Field, Modal, Spinner, custName, fmt, inputCls, todayISO } from "../ui.jsx";
 
 // key -> [i18n key, digits, bilingual label for print]
@@ -84,6 +85,8 @@ export default function StatementModal({ id, onClose }) {
   const [busy, setBusy] = useState(false);
   const [xl, setXl] = useState(false);
   const [err, setErr] = useState("");
+  const [tab, setTab] = useState("summary");
+  const [nonce, setNonce] = useState(0);
 
   const run = useCallback(async () => {
     setBusy(true);
@@ -105,16 +108,23 @@ export default function StatementModal({ id, onClose }) {
   const allZero = st && st.rows.every((r) => !r.opening && !r.debit && !r.credit && !r.closing);
 
   return (
-    <Modal title={t("statementTitle")} onClose={onClose} width="max-w-3xl">
+    <Modal title={t("statementTitle")} onClose={onClose} width={tab === "ledger" ? "max-w-6xl" : "max-w-3xl"}>
       <div className="space-y-4">
         <div className="grid grid-cols-2 items-end gap-3 sm:grid-cols-[1fr_1fr_auto]">
           <Field label={t("from")}><input type="date" className={inputCls} value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></Field>
           <Field label={t("to")}><input type="date" className={inputCls} value={to} min={from} onChange={(e) => setTo(e.target.value)} /></Field>
-          <Btn variant="primary" onClick={run} loading={busy} className="col-span-2 sm:col-span-1">{t("generate")}</Btn>
+          <Btn variant="primary" onClick={() => { run(); setNonce((n) => n + 1); }} loading={busy} className="col-span-2 sm:col-span-1">{t("generate")}</Btn>
+        </div>
+        <div className="inline-flex rounded-lg bg-card p-1 text-xs font-semibold" role="tablist">
+          {[["summary", "tabSummary"], ["ledger", "tabLedger"]].map(([k, key]) => (
+            <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
+              className={`rounded-md px-3 py-1.5 ${tab === k ? "bg-panel text-ink shadow-card" : "text-dim hover:text-ink"}`}>{t(key)}</button>
+          ))}
         </div>
         <ErrorBox>{err}</ErrorBox>
-        {busy && !st && <Spinner label={t("loading")} />}
-        {st && (
+        {tab === "ledger" && <LedgerView id={id} from={from} to={to} nonce={nonce} />}
+        {tab === "summary" && busy && !st && <Spinner label={t("loading")} />}
+        {tab === "summary" && st && (
           <>
             <div className="rounded-xl border border-line bg-card p-3 text-sm">
               <div className="font-semibold"><CustName c={st.customer} isAr={isAr} /></div>

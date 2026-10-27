@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  CalendarCheck, Coins, KeyRound, LayoutDashboard, Languages, LogOut, Menu, Moon, Sun, UserCog, Users as UsersIcon, X,
+  CalendarCheck, Coins, KeyRound, LayoutDashboard, Languages, LogOut, Moon, PanelLeft, Sun, UserCog, Users as UsersIcon, X,
 } from "lucide-react";
 import { api, getCompany, getToken, setCompany as setApiCompany, setToken, setUnauthorizedHandler } from "./api.js";
 import { useI18n } from "./i18n.jsx";
@@ -13,6 +13,12 @@ import StatementModal from "./components/StatementModal.jsx";
 import MyDay from "./components/MyDay.jsx";
 import GoldKpi from "./components/GoldKpi.jsx";
 import UsersPage from "./components/UsersPage.jsx";
+import {
+  AnimatedSidebar, AnimatedSidebarClose, AnimatedSidebarContent, AnimatedSidebarFooter, AnimatedSidebarGroup,
+  AnimatedSidebarGroupContent, AnimatedSidebarGroupLabel, AnimatedSidebarHeader, AnimatedSidebarInset,
+  AnimatedSidebarMenu, AnimatedSidebarMenuButton, AnimatedSidebarMenuItem, AnimatedSidebarProvider,
+  AnimatedSidebarRail, AnimatedSidebarTrigger,
+} from "@/components/ui/animated-sidebar";
 
 const ROUTES = [
   { id: "overview", icon: LayoutDashboard, label: "navOverview" },
@@ -75,9 +81,11 @@ export default function App() {
   const [companies, setCompanies] = useState([]);
   const [company, setCompanyState] = useState(getCompany());
   const [theme, setTheme] = useState(() => localStorage.getItem("gc_theme") || "light");
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [sbOpen, setSbOpen] = useState(() => localStorage.getItem("gc_sb") !== "0");
   const [pwOpen, setPwOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState(null);
+
+  useEffect(() => { try { localStorage.setItem("gc_sb", sbOpen ? "1" : "0"); } catch { /* ignore */ } }, [sbOpen]);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -127,7 +135,6 @@ export default function App() {
   const bump = useCallback(() => setVersion((v) => v + 1), []);
   const go = (id) => {
     window.location.hash = `#/${id}`;
-    setMenuOpen(false);
   };
 
   const ctx = useMemo(
@@ -143,102 +150,128 @@ export default function App() {
 
   const Page = { overview: Overview, customers: Customers, myday: MyDay, kpi: GoldKpi, users: UsersPage }[active];
 
+  const curCompany = companies.find((c) => c.key === company);
+  const side = lang === "ar" ? "right" : "left";
+  const activeRoute = routes.find((r) => r.id === active);
+
   const sidebar = (
-    <aside className="side-bg flex h-full w-64 flex-col bg-side text-white">
-      <div className="flex items-center gap-3 px-5 py-5">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white p-1.5">
-          <img src="/swag-mark.png" alt="" className="h-full w-full object-contain" />
-        </div>
-        <div className="min-w-0">
-          <div className="truncate text-[15px] font-bold">{t("appName")}</div>
-          <div className="truncate text-[11px] text-white/55">{t("appSub")}</div>
-        </div>
-      </div>
-      {companies.length > 1 && (
-        <div className="px-4 pb-1">
-          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/45">{t("company")}</div>
-          <div className="flex gap-1 rounded-xl bg-white/10 p-1" role="radiogroup">
-            {companies.map((c) => (
-              <button key={c.key} role="radio" aria-checked={company === c.key} onClick={() => { switchCompany(c.key); setMenuOpen(false); }}
-                className={`min-w-0 flex-1 truncate rounded-lg px-2 py-1.5 text-xs font-bold ${
-                  company === c.key ? "bg-white text-[#211c3d] shadow" : "text-white/70 hover:bg-white/10 hover:text-white"}`}>
-                {c.name}
-              </button>
-            ))}
+    <AnimatedSidebar ariaLabel={t("appName")} side={side} collapsible="icon" panelClassName="side-bg">
+      <AnimatedSidebarHeader className="p-3 pb-2">
+        <div className="flex min-h-11 items-center gap-3 overflow-hidden px-1">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white p-1.5">
+            <img src="/swag-mark.png" alt="" className="h-full w-full object-contain" />
           </div>
-        </div>
-      )}
-      <nav className="flex-1 space-y-1 px-3 py-2">
-        {routes.map((r) => (
-          <button
-            key={r.id}
-            onClick={() => go(r.id)}
-            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-start text-sm font-medium ${
-              active === r.id ? "bg-white/15 text-white" : "text-white/65 hover:bg-white/10 hover:text-white"
-            }`}
-          >
-            <r.icon size={18} /> {t(r.label)}
-          </button>
-        ))}
-      </nav>
-      <div className="space-y-2 border-t border-white/10 p-4">
-        <div className="flex items-center gap-2.5 px-1">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand text-sm font-bold">
-            {(user.name || "?").slice(0, 1).toUpperCase()}
+          <div className="min-w-0 flex-1 group-data-[state=collapsed]/sidebar:hidden">
+            <div className="truncate text-[15px] font-bold text-white">{t("appName")}</div>
+            <div className="truncate text-[11px] text-white/55">{t("appSub")}</div>
           </div>
-          <div className="min-w-0 text-xs">
-            <div className="truncate font-semibold">{user.name}</div>
-            <div className="text-white/55">{user.role === "admin" ? t("rAdmin") : t("rCollector")}</div>
-          </div>
+          <AnimatedSidebarClose className="ms-auto text-white/70 hover:bg-white/10 md:hidden">
+            <X aria-hidden="true" className="size-4" />
+          </AnimatedSidebarClose>
         </div>
-        <div className="flex gap-1.5">
-          <button onClick={() => setLang(lang === "ar" ? "en" : "ar")} title={t("language")}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-white/10 py-2 text-xs hover:bg-white/20">
-            <Languages size={14} /> {t("language")}
-          </button>
-          <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} title={t("theme")}
-            className="flex w-10 items-center justify-center rounded-lg bg-white/10 hover:bg-white/20">
-            {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
-          </button>
-          <button onClick={() => setPwOpen(true)} title={t("changePassword")}
-            className="flex w-10 items-center justify-center rounded-lg bg-white/10 hover:bg-white/20">
-            <KeyRound size={14} />
-          </button>
-          <button onClick={logout} title={t("signOut")}
-            className="flex w-10 items-center justify-center rounded-lg bg-white/10 hover:bg-white/20">
-            <LogOut size={14} />
-          </button>
+      </AnimatedSidebarHeader>
+
+      <AnimatedSidebarContent className="pt-1">
+        {companies.length > 1 && (
+          <AnimatedSidebarGroup className="pb-1">
+            <AnimatedSidebarGroupLabel className="mb-0 h-6">{t("company")}</AnimatedSidebarGroupLabel>
+            <div className="flex gap-1 rounded-xl bg-white/10 p-1 group-data-[state=collapsed]/sidebar:flex-col" role="radiogroup">
+              {companies.map((c) => (
+                <button key={c.key} role="radio" aria-checked={company === c.key} title={c.name}
+                  onClick={() => switchCompany(c.key)}
+                  className={`min-w-0 flex-1 truncate rounded-lg px-2 py-1.5 text-xs font-bold outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                    company === c.key ? "bg-white text-[#211c3d] shadow" : "text-white/70 hover:bg-white/10 hover:text-white"}`}>
+                  <span className="group-data-[state=collapsed]/sidebar:hidden">{c.name}</span>
+                  <span className="hidden group-data-[state=collapsed]/sidebar:inline">{c.name.slice(0, 2)}</span>
+                </button>
+              ))}
+            </div>
+          </AnimatedSidebarGroup>
+        )}
+
+        <AnimatedSidebarGroup className="pt-1">
+          <AnimatedSidebarGroupLabel>{t("grpMain")}</AnimatedSidebarGroupLabel>
+          <AnimatedSidebarGroupContent>
+            <AnimatedSidebarMenu>
+              {routes.map((r) => (
+                <AnimatedSidebarMenuItem key={r.id}>
+                  <AnimatedSidebarMenuButton isActive={active === r.id} icon={<r.icon className="size-4" />} onSelect={() => go(r.id)}>
+                    {t(r.label)}
+                  </AnimatedSidebarMenuButton>
+                </AnimatedSidebarMenuItem>
+              ))}
+            </AnimatedSidebarMenu>
+          </AnimatedSidebarGroupContent>
+        </AnimatedSidebarGroup>
+
+        <AnimatedSidebarGroup className="pt-1">
+          <AnimatedSidebarGroupLabel>{t("grpAccount")}</AnimatedSidebarGroupLabel>
+          <AnimatedSidebarGroupContent>
+            <AnimatedSidebarMenu>
+              <AnimatedSidebarMenuItem>
+                <AnimatedSidebarMenuButton icon={<Languages className="size-4" />} closeOnSelect={false} onSelect={() => setLang(lang === "ar" ? "en" : "ar")}>
+                  {t("language")}
+                </AnimatedSidebarMenuButton>
+              </AnimatedSidebarMenuItem>
+              <AnimatedSidebarMenuItem>
+                <AnimatedSidebarMenuButton icon={theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />} closeOnSelect={false}
+                  onSelect={() => setTheme(theme === "dark" ? "light" : "dark")}>
+                  {theme === "dark" ? t("lightMode") : t("darkMode")}
+                </AnimatedSidebarMenuButton>
+              </AnimatedSidebarMenuItem>
+              <AnimatedSidebarMenuItem>
+                <AnimatedSidebarMenuButton icon={<KeyRound className="size-4" />} onSelect={() => setPwOpen(true)}>
+                  {t("changePassword")}
+                </AnimatedSidebarMenuButton>
+              </AnimatedSidebarMenuItem>
+              <AnimatedSidebarMenuItem>
+                <AnimatedSidebarMenuButton icon={<LogOut className="size-4" />} onSelect={logout}>
+                  {t("signOut")}
+                </AnimatedSidebarMenuButton>
+              </AnimatedSidebarMenuItem>
+            </AnimatedSidebarMenu>
+          </AnimatedSidebarGroupContent>
+        </AnimatedSidebarGroup>
+      </AnimatedSidebarContent>
+
+      <AnimatedSidebarFooter className="gap-3 border-none p-3">
+        <div className="flex min-h-11 w-full items-center gap-3 overflow-hidden rounded-xl p-1 text-start">
+          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#d5ff66] text-xs font-semibold text-[#172000]">
+            {(user.name || "?").slice(0, 2).toUpperCase()}
+          </span>
+          <span className="min-w-0 flex-1 group-data-[state=collapsed]/sidebar:hidden">
+            <span className="block truncate text-sm font-medium text-white">{user.name}</span>
+            <span className="block truncate text-xs text-white/55">{user.role === "admin" ? t("rAdmin") : t("rCollector")}</span>
+          </span>
         </div>
-      </div>
-    </aside>
+      </AnimatedSidebarFooter>
+
+      <AnimatedSidebarRail />
+    </AnimatedSidebar>
   );
 
   return (
     <AppCtx.Provider value={ctx}>
-      <div className="min-h-dvh bg-app">
-        {/* desktop sidebar */}
-        <div className="fixed inset-y-0 start-0 z-30 hidden w-64 lg:block">{sidebar}</div>
-        {/* mobile bar + drawer */}
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-panel px-4 py-3 lg:hidden">
-          <button onClick={() => setMenuOpen(true)} aria-label="menu"><Menu size={22} /></button>
-          <span className="font-bold">{t("appName")}</span>
-          {companies.length > 1 && <span className="rounded-full bg-brand/10 px-2 py-0.5 text-xs font-bold text-brand">{companies.find((c) => c.key === company)?.name}</span>}
-        </header>
-        {menuOpen && (
-          <div className="fixed inset-0 z-50 lg:hidden" onClick={() => setMenuOpen(false)}>
-            <div className="absolute inset-0 bg-black/50" />
-            <div className="absolute inset-y-0 start-0" onClick={(e) => e.stopPropagation()}>
-              <button className="absolute end-2 top-2 z-10 text-white/70" onClick={() => setMenuOpen(false)}><X size={20} /></button>
-              {sidebar}
+      <AnimatedSidebarProvider open={sbOpen} onOpenChange={setSbOpen} className="bg-app" style={{ "--sidebar-width": "16rem", "--sidebar-width-icon": "4.5rem" }}>
+        {sidebar}
+        <AnimatedSidebarInset className="min-h-svh bg-app">
+          <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-panel px-3 py-2 sm:px-5">
+            <AnimatedSidebarTrigger className="text-dim transition-colors hover:bg-hover hover:text-ink">
+              <PanelLeft aria-hidden="true" className="size-[18px] rtl:scale-x-[-1]" />
+            </AnimatedSidebarTrigger>
+            <div className="h-5 w-px bg-line" />
+            <span className="text-sm font-semibold text-ink">{activeRoute ? t(activeRoute.label) : t("appName")}</span>
+            {companies.length > 1 && curCompany && (
+              <span className="rounded-full bg-brand/10 px-2 py-0.5 text-xs font-bold text-brand">{curCompany.name}</span>
+            )}
+            <span className="ms-auto hidden text-[11px] text-faint lg:block">Ctrl/⌘ + B</span>
+          </header>
+          <div className="p-4 sm:p-6">
+            <div className="mx-auto w-full max-w-[1280px]">
+              <Page key={`${active}-${company}`} />
             </div>
           </div>
-        )}
-
-        <main className="p-4 sm:p-6 lg:ms-64">
-          <div className="mx-auto max-w-[1280px]">
-            <Page key={`${active}-${company}`} />
-          </div>
-        </main>
+        </AnimatedSidebarInset>
 
         {drawerId && <CustomerDrawer id={drawerId} onClose={() => setDrawerId(null)} />}
         {stmtId && <StatementModal id={stmtId} onClose={() => setStmtId(null)} />}
@@ -249,7 +282,7 @@ export default function App() {
             {toastMsg.msg}
           </div>
         )}
-      </div>
+      </AnimatedSidebarProvider>
     </AppCtx.Provider>
   );
 }

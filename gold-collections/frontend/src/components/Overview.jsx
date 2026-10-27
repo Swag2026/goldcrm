@@ -82,11 +82,11 @@ function ListRow({ c, isAr, onOpen, tag, right, action }) {
   );
 }
 
-function BalPair({ c }) {
+function BalPair({ c, t }) {
   return (
     <>
-      <div className={`font-semibold ${c.gold_balance > 0 ? "text-danger" : "text-faint"}`}>{fmt(c.gold_balance)} g</div>
-      <div className="text-faint">{fmt(c.cash_balance, 0)}</div>
+      <div className={c.gold_balance > 0.0005 ? "font-semibold text-danger" : c.gold_balance < -0.0005 ? "text-brand" : "text-faint"}><span className="font-normal text-faint">{t("gold")} </span>{fmt(c.gold_balance)} g</div>
+      <div className={c.cash_balance > 0.5 ? "font-semibold text-danger" : c.cash_balance < -0.5 ? "text-brand" : "text-faint"}><span className="font-normal text-faint">{t("cash")} </span>{fmt(c.cash_balance, 0)}</div>
     </>
   );
 }
@@ -124,7 +124,7 @@ function Attention({ d, isAr, t, user, openCustomer, bump, toast }) {
       </div>
       {cur[4].length === 0 ? <Empty>{t("allClear")} ✨</Empty> : cur[4].map((c) => (
         <ListRow key={`${tab}-${c.id}`} c={c} isAr={isAr} onOpen={openCustomer}
-          right={<BalPair c={c} />}
+          right={<BalPair c={c} t={t} />}
           tag={
             tab === "followups" ? <Badge tone={c.days > 0 ? "danger" : "warn"}>{c.days > 0 ? `${c.days} ${t("daysOverdue")}` : t("dueToday")}</Badge>
             : tab === "promises" ? (<>
@@ -235,7 +235,7 @@ export default function Overview() {
         <KpiTile accent label={t("goldReceivable")} value={T.gold_receivable} unit={t("grams")} digits={2}
           delta={ch?.gold_receivable ?? null} since={since} spark={sp("gold_receivable")} color="var(--gold)" hint={t("noHistoryYet")}
           sub={`${t("weOweTotal")}: ${fmt(T.gold_payable)} ${t("grams")}`} />
-        <KpiTile label={t("cashReceivable")} value={T.cash_receivable} digits={0}
+        <KpiTile label={t("cashReceivable")} value={T.cash_receivable} unit={t("sar")} digits={0}
           delta={ch?.cash_receivable ?? null} since={since} spark={sp("cash_receivable")} color="var(--primary)" hint={t("noHistoryYet")}
           sub={`${t("weOweTotal")}: ${fmt(T.cash_payable, 0)}`} />
         <KpiTile label={t("silverReceivable")} value={T.silver_receivable} unit={t("grams")} digits={0}

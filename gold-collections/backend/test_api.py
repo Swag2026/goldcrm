@@ -224,6 +224,7 @@ def run():
     migration_test()
     report_import_tests()
     real_row_test()
+    ledger_tests()
     print("ALL BACKEND TESTS PASSED")
 
 
@@ -354,6 +355,65 @@ def real_row_test():
     # opening non-zero: closing = opening + net
     row["opening"]["carat_24"] = 100
     assert {r["key"]: r for r in gerp._row_to_lines(row)}["c24"]["closing"] == 316.04
+
+
+def ledger_tests():
+    """Ledger: GERP `statement-of-accounts` response ke format ka synthetic fixture + endpoint (mock)."""
+    import gerp
+    def line(i, d, v, typ, deb=0, cre=0, bal=0, g=(0, 0, 0), k21=(0, 0, 0)):
+        r = {"index": i, "date": d, "voucher_no": v, "note_type_id": 100 + i, "note_type_name": typ, "note_type_name_ar": " \u0633\u0646\u062f ",
+             "remark_english": "demo", "sales": None, "purchase": None, "sales_return": None, "purchase_return": None,
+             "debit": deb, "credit": cre, "balance": bal}
+        for k in ("18", "22", "silver", "platinum", "palladium"):
+            r.update({f"debit_{k}": 0, f"credit_{k}": 0, f"balance_{k}": 0})
+        r.update({"debit_24": g[0], "credit_24": g[1], "balance_24": g[2], "debit_21": k21[0], "credit_21": k21[1], "balance_21": k21[2]})
+        return r
+    raw = {"status": "ok", "statuscode": 200, "data": {
+        "data": [line(1, "2026-03-18", "MR1", "METAL RECEIPTS", g=(0, 7000, -7000)),
+                 line(2, "2026-03-18", "PC1", "CREDIT PURCHASE", 0, 3030135, -3030135, g=(5000, 0, -2000), k21=(310, 0, 310)),
+                 line(3, "2026-10-27", "MR2", "METAL RECEIPTS", 0, 0, -3030135, g=(0, 5000, -7000), k21=(0, 310, 0))],
+        "debit_total": 0, "credit_total": 3030135, "balance_total": -3030135,
+        "debit_total24": 5000, "credit_total24": 12000, "balance_total24": -7000,
+        "debit_total21": 310, "credit_total21": 310, "balance_total21": 0,
+        "cash_balance": "-3,030,135.00", "gold_balance": "-7,000.00", "silver_balance": "0.00"}}
+    led = gerp.normalize_ledger(raw)
+    assert len(led["lines"]) == 3 and led["active_metals"] == ["21", "24"]
+    assert led["closing"] == {"cash": -3030135.0, "gold": -7000.0, "silver": 0.0}
+    assert led["totals"]["24"] == {"debit": 5000.0, "credit": 12000.0, "balance": -7000.0}
+    assert [x["name"] for x in led["types"]] == ["METAL RECEIPTS", "CREDIT PURCHASE"]
+    assert led["lines"][0]["type_ar"] == "\u0633\u0646\u062f"  # strip
+    # totals missing => lines se hisab
+    raw2 = {"data": [line(1, "2026-01-01", "A", "CASH", 100, 0, 100), line(2, "2026-01-02", "B", "CASH", 0, 40, 60)]}
+    l2 = gerp.normalize_ledger(raw2)
+    assert l2["totals"]["cash"] == {"debit": 100.0, "credit": 40.0, "balance": 60.0} and l2["closing"]["cash"] == 60.0
+    # khali / alag shape
+    assert gerp.normalize_ledger({"data": {"data": []}})["lines"] == [] and gerp.normalize_ledger({})["lines"] == []
+
+    with TestClient(app) as c:
+        adm = c.post("/api/auth/login", json={"username": "admin", "password": "admin12345"}).json()["token"]
+        t0 = config.today()
+        for comp in ("swag", "laroche"):
+            items = c.get(f"/api/customers?flt=gold_debtors&limit=5&company={comp}", headers=H(adm)).json()["items"]
+            cid, bal = items[0]["id"], items[0]
+            q = f"from_date={(t0 - timedelta(days=200)).isoformat()}&to_date={t0.isoformat()}"
+            r = c.get(f"/api/customers/{cid}/ledger?{q}", headers=H(adm))
+            assert r.status_code == 200, r.text
+            L = r.json()
+            assert len(L["lines"]) == 22 and L["company"] == {"swag": "SWAG", "laroche": "LAROUCHE"}[comp]
+            # running balance + closing = customer ka synced balance
+            prev = 0.0
+            for ln in L["lines"]:
+                assert abs(prev + ln["debit"] - ln["credit"] - ln["balance"]) < 0.02, (prev, ln)
+                prev = ln["balance"]
+            assert abs(L["closing"]["cash"] - bal["cash_balance"]) < 0.05 and abs(L["closing"]["gold"] - bal["gold_balance"]) < 0.01, (L["closing"], bal)
+            assert abs(L["vs_synced"]["cash"]) < 0.05 and abs(L["vs_synced"]["gold"]) < 0.01
+            assert "24" in L["active_metals"] and L["customer"]["id"] == cid and L["company_info"]["name"]
+            rx = c.get(f"/api/customers/{cid}/ledger.xlsx?{q}", headers=H(adm))
+            ws = load_workbook(io.BytesIO(rx.content)).active
+            assert rx.status_code == 200 and ws.max_row == 5 + 22 + 1, ws.max_row
+        assert c.get(f"/api/customers/{cid}/ledger?{q}").status_code == 401
+        assert c.get(f"/api/customers/{cid}/ledger?from_date={t0.isoformat()}&to_date={(t0 - timedelta(days=1)).isoformat()}", headers=H(adm)).status_code == 400
+        assert c.get(f"/api/customers/999999/ledger?{q}", headers=H(adm)).status_code == 404
 
 
 def migration_test():
