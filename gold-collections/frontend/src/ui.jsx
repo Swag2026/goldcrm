@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
-import { ArrowDownRight, ArrowUpRight } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, MessageCircle, Phone } from "lucide-react";
 import { Loader2 } from "lucide-react";
 import { useI18n } from "./i18n.jsx";
 
@@ -283,5 +283,37 @@ export function Tile({ title, action, className = "", children, pad = true }) {
       )}
       <div className={pad ? "p-5 pt-3" : ""}>{children}</div>
     </section>
+  );
+}
+
+
+// Saudi mobile => wa.me format (05XXXXXXXX -> 9665XXXXXXXX)
+export function waNumber(m) {
+  let d = String(m || "").replace(/[^\d]/g, "");
+  if (d.startsWith("00")) d = d.slice(2);
+  if (d.startsWith("05") && d.length === 10) d = "966" + d.slice(1);
+  else if (d.startsWith("5") && d.length === 9) d = "966" + d;
+  return d;
+}
+
+export function ContactLinks({ mobile, className = "" }) {
+  if (!mobile) return null;
+  const base = "inline-flex h-7 w-7 items-center justify-center rounded-md text-dim hover:bg-card";
+  return (
+    <span className={`inline-flex items-center gap-0.5 ${className}`} onClick={(e) => e.stopPropagation()}>
+      <a href={`tel:${mobile}`} title={mobile} className={`${base} hover:text-brand`}><Phone size={15} /></a>
+      <a href={`https://wa.me/${waNumber(mobile)}`} target="_blank" rel="noreferrer" title="WhatsApp" className={`${base} hover:text-ok`}><MessageCircle size={15} /></a>
+    </span>
+  );
+}
+
+export function TxnAge({ date, days, t }) {
+  if (!date) return <span className="text-faint">—</span>;
+  const tone = days > 60 ? "text-danger" : days > 30 ? "text-warn" : "text-dim";
+  return (
+    <span className="whitespace-nowrap" dir="ltr">
+      <span className={tone}>{date}</span>
+      <span className="ms-1 text-[10px] text-faint">{days === 0 ? t("today") : <>{days} <span className="[unicode-bidi:isolate]">{t("daysAgo")}</span></>}</span>
+    </span>
   );
 }

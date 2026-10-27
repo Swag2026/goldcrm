@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 import config
 import gerp
+import report_import
 import services as svc
 from db import Customer, Followup, SessionLocal, User, get_db, init_db
 from security import (admin_only, create_token, current_user, hash_password, throttle_check, throttle_clear,
@@ -221,19 +222,20 @@ def export_customers(
     wb = Workbook()
     ws = wb.active
     ws.title = "Customers"
-    head = ["Code", "Name", "Name (AR)", "Gold balance (g)", "Cash balance", "Silver balance (g)",
-            "Assigned to", "Status", "Last follow-up", "Next follow-up"]
+    head = ["Code", "Name", "Name (AR)", "Mobile", "Address", "Gold balance (g)", "Cash balance", "Silver balance (g)",
+            "Last invoice amt", "Last transaction", "Assigned to", "Status", "Last follow-up", "Next follow-up"]
     ws.append(head)
     for cell in ws[1]:
         cell.font = Font(bold=True, color="FFFFFF")
         cell.fill = PatternFill("solid", fgColor="5750F1")
     for c in sorted(customers, key=lambda c: c.gold_balance, reverse=True):
         lf = lasts.get(c.id)
-        ws.append([c.code, c.name, c.name_ar, c.gold_balance, c.cash_balance, c.silver_balance,
+        ws.append([c.code, c.name, c.name_ar, c.mobile or "", c.address or "", c.gold_balance, c.cash_balance, c.silver_balance,
+                   c.last_invoice_amt, c.last_txn_date.isoformat() if c.last_txn_date else "",
                    users.get(c.assigned_to, ""), c.status,
                    lf.created_at.strftime("%Y-%m-%d") if lf else "",
                    lf.next_followup_date.isoformat() if lf and lf.next_followup_date else ""])
-    for col, w in zip("ABCDEFGHIJ", (14, 34, 34, 16, 16, 18, 18, 10, 16, 16)):
+    for col, w in zip("ABCDEFGHIJKLMN", (14, 34, 34, 14, 30, 16, 16, 18, 16, 16, 18, 10, 16, 16)):
         ws.column_dimensions[col].width = w
     ws.freeze_panes = "A2"
     buf = io.BytesIO()
@@ -252,10 +254,10 @@ def _statement(cid, from_date, to_date, db):
     if not c:
         raise HTTPException(404, "Customer not found")
     co = svc.get_co(c.company)
-    st = gerp.customer_statement(co, cid - co["offset"], from_date, to_date)
+    st = gerp.customer_statement(co, c.code, c.name, c.name_ar, from_date, to_date)
     st["company"] = co["name"]
-    st["customer"]["name"] = st["customer"]["name"] or c.name
-    st["customer"]["name_ar"] = st["customer"]["name_ar"] or c.name_ar
+    st["company_info"] = {"name": co["name"], "legal_name": co["legal_name"], "legal_name_en": co["legal_name_en"],
+                          "vat": co["vat"], "address": co["address"], "address_en": co["address_en"]}
     st["generated_at"] = config.now().isoformat(timespec="minutes")
     return st
 
@@ -284,11 +286,12 @@ def customer_statement_xlsx(cid: int, from_date: date, to_date: date, _: User = 
     for cell in ws[ws.max_row]:
         cell.font = Font(bold=True, color="FFFFFF")
         cell.fill = PatternFill("solid", fgColor="5750F1")
-    for m_, label in (("gold", "Gold (g)"), ("cash", "Cash"), ("silver", "Silver (g)")):
-        r = st["metals"][m_]
-        ws.append([label, r["opening"], r["debit"], r["credit"], r["closing"]])
+    labels = {"sar": "Cash (SAR)", "c24": "Gold 24K (g)", "c22": "Gold 22K (g)", "c21": "Gold 21K (g)", "c18": "Gold 18K (g)",
+              "gold24": "Gold total in 24K (g)", "silver": "Silver (g)"}
+    for r in st["rows"]:
+        ws.append([labels[r["key"]], r["opening"], r["debit"], r["credit"], r["closing"]])
     ws.append([])
-    ws.append(["Balance = debit - credit. Positive = customer owes us."])
+    ws.append(["Balance = debit - credit. Positive = customer owes us. Summary statement (opening -> period -> closing); line-by-line entries are not available from the API."])
     for col, w in zip("ABCDE", (22, 18, 18, 18, 18)):
         ws.column_dimensions[col].width = w
     buf = io.BytesIO()
@@ -296,6 +299,22 @@ def customer_statement_xlsx(cid: int, from_date: date, to_date: date, _: User = 
     name = f'statement-{st["customer"]["code"] or cid}-{st["to_date"]}.xlsx'
     return Response(buf.getvalue(), headers={"Content-Disposition": f'attachment; filename="{name}"'},
                     media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@app.post("/api/customers/import-report")
+async def import_report(request: Request, company: str = "", force: bool = False, _: User = Depends(admin_only),
+                        db: Session = Depends(get_db)):
+    """Body = GERP 'Customer and Supplier Report' .xlsx (raw bytes). Admin only."""
+    company = resolve_company(company)
+    data = await request.body()
+    if not data:
+        raise HTTPException(400, "File khali hai")
+    ensure_fresh(db, company)  # customers table bhari honi chahiye
+    parsed = report_import.parse_report(data)
+    res = report_import.apply_report(db, company, parsed, force=force)
+    svc.meta_set(db, f"profile_import:{company}", config.now().isoformat(timespec="minutes"))
+    db.commit()
+    return {**res, "company": company}
 
 
 class AssignIn(BaseModel):

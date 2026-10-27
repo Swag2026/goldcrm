@@ -139,6 +139,15 @@ def run():
         for mk, v in st["metals"].items():
             assert abs(v["opening"] + v["debit"] - v["credit"] - v["closing"]) < 0.01, (mk, v)
         assert st["metals"]["gold"]["closing"] > 0 and st["customer"]["code"]
+        rows = {r["key"]: r for r in st["rows"]}
+        assert list(rows) == ["sar", "c24", "c22", "c21", "c18", "gold24", "silver"]
+        for r_ in rows.values():
+            assert abs(r_["opening"] + r_["debit"] - r_["credit"] - r_["closing"]) < 0.01, r_
+        # carat-wise gold 24K-equivalent mein total ke barabar
+        eq = rows["c24"]["closing"] + rows["c22"]["closing"] * 22 / 24 + rows["c21"]["closing"] * 21 / 24 + rows["c18"]["closing"] * 18 / 24
+        assert abs(eq - rows["gold24"]["closing"]) < 0.01, (eq, rows["gold24"])
+        assert st["reconciled"] is True and st["found"] is True
+        assert st["company_info"]["name"] == "SWAG" and "vat" in st["company_info"]
         assert c.get(f"/api/customers/{target}/statement?from_date={t.isoformat()}&to_date={(t - timedelta(days=1)).isoformat()}", headers=H(adm)).status_code == 400
         assert c.get(f"/api/customers/999999/statement?{sq}", headers=H(adm)).status_code == 404
         assert c.get(f"/api/customers/{target}/statement?{sq}").status_code == 401
@@ -213,6 +222,8 @@ def run():
 
     multi_company_tests()
     migration_test()
+    report_import_tests()
+    real_row_test()
     print("ALL BACKEND TESTS PASSED")
 
 
@@ -266,6 +277,83 @@ def multi_company_tests():
         # my day scoped
         md = c.get("/api/myday?scope=all&company=swag", headers=H(adm)).json()
         assert all(x["id"] < 1_000_000 for x in md["followups"] + md["promises"] + md["unassigned_debtors"])
+
+
+def _make_report(rows, date_line="Date Until : 27-10-2026", path=None):
+    from openpyxl import Workbook
+    wb = Workbook(); ws = wb.active
+    ws.append(["Customer and Supplier Report"]); ws.append([date_line]); ws.append([])
+    ws.append(["Account Code", "Account", "Address", "Mobile No", "Last Invoice Amt", "Balance Cash", "Balance Gold", "Balance Silver", "Last Transaction Date"])
+    for r in rows:
+        ws.append(r)
+    buf = io.BytesIO(); wb.save(buf)
+    return buf.getvalue()
+
+
+def report_import_tests():
+    import gerp
+    with TestClient(app) as c:
+        adm = c.post("/api/auth/login", json={"username": "admin", "password": "admin12345"}).json()["token"]
+        ali = c.post("/api/auth/login", json={"username": "ali", "password": "newpass-1234"}).json()["token"]
+        la = c.get("/api/customers?flt=all&limit=100&company=laroche", headers=H(adm)).json()["items"]
+        sw = c.get("/api/customers?flt=all&limit=100&company=swag", headers=H(adm)).json()["items"]
+        # laroche ke asli (mock) naam + code se report banao; 9-digit mobile number (Excel leading-zero loss)
+        rows = [[x["code"], x["name"], "جدة حي البلد", (556657866 if i == 0 else "0591578363" if i == 1 else ""), 5200.5 if i < 3 else "",
+                 1, 2, 3, "2026-10-26" if i % 2 else "2026-10-20"] for i, x in enumerate(la[:30])]
+        rows.append(["21110040", "Some Supplier", "", "0566615948", "", -5, "", "", "2026-10-27"])  # supplier => unmatched
+        data = _make_report(rows)
+        H2 = {**H(adm), "Content-Type": "application/octet-stream"}
+        # permissions + validation
+        assert c.post("/api/customers/import-report?company=laroche", headers={**H(ali), "Content-Type": "application/octet-stream"}, content=data).status_code == 403
+        assert c.post("/api/customers/import-report?company=laroche", headers=H2, content=b"").status_code == 400
+        assert c.post("/api/customers/import-report?company=laroche", headers=H2, content=b"not an excel").status_code == 400
+        assert c.post("/api/customers/import-report?company=laroche", headers=H2, content=_make_report([]) ).status_code == 409  # koi match nahi
+        # galat company: laroche ki file swag par => naam match nahi
+        wrong = c.post("/api/customers/import-report?company=swag", headers=H2, content=data)
+        assert wrong.status_code == 409, wrong.text
+        # sahi company
+        r = c.post("/api/customers/import-report?company=laroche", headers=H2, content=data)
+        assert r.status_code == 200, r.text
+        j = r.json()
+        assert j["matched"] == 30 and j["unmatched_total"] == 1 and j["unmatched"][0]["code"] == "21110040"
+        assert j["name_match_pct"] == 100 and j["report_date"] == "2026-10-27" and j["with_mobile"] == 2
+        d = c.get(f"/api/customers/{la[0]['id']}", headers=H(adm)).json()
+        assert d["mobile"] == "0556657866" and d["address"] == "جدة حي البلد" and d["last_invoice_amt"] == 5200.5
+        assert d["last_txn_date"] and d["days_since_txn"] == (config.today() - __import__("datetime").date.fromisoformat(d["last_txn_date"])).days
+        lst = c.get("/api/customers?flt=all&limit=100&company=laroche", headers=H(adm)).json()["items"]
+        assert lst[0]["mobile"] == "0556657866" and "address" not in lst[0]
+        # swag customers par kuch nahi aaya
+        assert all(x["mobile"] == "" for x in c.get("/api/customers?flt=all&limit=100&company=swag", headers=H(adm)).json()["items"])
+        # force se galat company bhi (admin ki marzi)
+        # export mein mobile/address
+        rx = c.get("/api/customers/export.xlsx?flt=all&company=laroche", headers=H(adm))
+        ws = load_workbook(io.BytesIO(rx.content)).active
+        assert [c_.value for c_ in ws[1]][3:5] == ["Mobile", "Address"]
+        # dobara import: idempotent
+        assert c.post("/api/customers/import-report?company=laroche", headers=H2, content=data).json()["matched"] == 30
+    # parser: unit
+    import report_import
+    p = report_import.parse_report(data)
+    assert len(p["rows"]) == 31 and p["rows"][0]["mobile"] == "0556657866" and str(p["report_date"]) == "2026-10-27"
+
+
+def real_row_test():
+    """Asli GERP summary-of-all-accounts row (11210008, Colab output se) => statement lines."""
+    import gerp
+    row = {"account_code": "11210008", "opening": {"amount": 0, "silver": 0, "carat_18": 0, "carat_21": 0, "carat_22": 0, "carat_24": 0, "all_in_24": 0},
+           "period": {"amount": {"debit": 648, "credit": 110115.38, "net": -109467.38}, "silver": {"debit": 0, "credit": 0, "net": 0},
+                      "carat_18": {"debit": 311.9, "credit": 1813.6, "net": -1501.7}, "carat_21": {"debit": 83.7, "credit": 0, "net": 83.7},
+                      "carat_22": {"debit": 0, "credit": 0, "net": 0}, "carat_24": {"debit": 216.04, "credit": 0, "net": 216.04},
+                      "all_in_24": {"debit": 523.2025, "credit": 1360.2, "net": -836.9975}}}
+    by = {r["key"]: r for r in gerp._row_to_lines(row)}
+    assert by["sar"] == {"key": "sar", "opening": 0.0, "debit": 648.0, "credit": 110115.38, "closing": -109467.38}
+    assert by["c18"]["debit"] == 311.9 and by["c18"]["credit"] == 1813.6 and by["c18"]["closing"] == -1501.7
+    assert by["gold24"]["closing"] == -836.9975 and by["silver"]["closing"] == 0
+    # row nahi mili => sab zero
+    assert all(r["closing"] == 0 for r in gerp._row_to_lines(None))
+    # opening non-zero: closing = opening + net
+    row["opening"]["carat_24"] = 100
+    assert {r["key"]: r for r in gerp._row_to_lines(row)}["c24"]["closing"] == 316.04
 
 
 def migration_test():

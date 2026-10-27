@@ -217,6 +217,9 @@ def customer_dict(c: Customer, last: Optional[Followup] = None, promise: Optiona
         "promise": promise_dict(promise),
         "synced_at": c.synced_at.isoformat(timespec="seconds") if c.synced_at else None,
         "delta": _delta(c, prev),
+        "mobile": c.mobile or "",
+        "last_txn_date": c.last_txn_date.isoformat() if c.last_txn_date else None,
+        "days_since_txn": (config.today() - c.last_txn_date).days if c.last_txn_date else None,
     }
     if detail:
         for m in METALS:
@@ -224,6 +227,9 @@ def customer_dict(c: Customer, last: Optional[Followup] = None, promise: Optiona
             d[f"{m}_credit"] = getattr(c, f"{m}_credit")
         d["notes"] = c.notes
         d["account_id"] = c.account_id
+        d["address"] = c.address or ""
+        d["last_invoice_amt"] = c.last_invoice_amt
+        d["profile_updated_at"] = c.profile_updated_at.isoformat(timespec="minutes") if c.profile_updated_at else None
     return d
 
 
@@ -293,7 +299,7 @@ def sort_customers(rows: list, sort: str, desc: bool) -> list:
 
 # ------------------------------------------------------------------ overview / my day
 def _brief(c: Customer, **extra) -> dict:
-    return {"id": c.id, "name": c.name or c.name_ar, "name_ar": c.name_ar or c.name,
+    return {"id": c.id, "name": c.name or c.name_ar, "name_ar": c.name_ar or c.name, "mobile": c.mobile or "",
             "gold_balance": c.gold_balance, "cash_balance": c.cash_balance, "silver_balance": c.silver_balance, **extra}
 
 

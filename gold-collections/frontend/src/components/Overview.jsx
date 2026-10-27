@@ -4,7 +4,7 @@ import { CalendarClock, HandCoins, HelpCircle, History, MapPin, MessageCircle, P
 import { api } from "../api.js";
 import { useI18n } from "../i18n.jsx";
 import {
-  Badge, Btn, CountUp, DeltaChip, Empty, ErrorBox, Pills, Sparkline, Spinner, Tile, CustName, custName, fmt, useApp,
+  Badge, Btn, ContactLinks, CountUp, DeltaChip, Empty, ErrorBox, Pills, Sparkline, Spinner, Tile, CustName, custName, fmt, useApp,
 } from "../ui.jsx";
 
 const tip = {
@@ -75,6 +75,7 @@ function ListRow({ c, isAr, onOpen, tag, right, action }) {
         <CustName c={c} isAr={isAr} compact className="text-sm font-medium" />
         <div className="mt-0.5 flex flex-wrap items-center gap-1.5">{tag}</div>
       </button>
+      <ContactLinks mobile={c.mobile} />
       <div className="text-end text-xs tabular-nums" dir="ltr">{right}</div>
       {action}
     </div>

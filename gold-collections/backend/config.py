@@ -42,6 +42,8 @@ def _load_companies() -> list:
             "branches": [int(x) for x in it.get("branches", [1])],
             "convert": int(it.get("convert", GERP_CONVERT)), "currency": int(it.get("currency", GERP_CURRENCY)),
             "mock": MOCK,
+            "legal_name": it.get("legal_name", ""), "legal_name_en": it.get("legal_name_en", ""),
+            "vat": str(it.get("vat", "")), "address": it.get("address", ""), "address_en": it.get("address_en", ""),
         })
     return out
 

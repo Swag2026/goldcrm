@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Check, CalendarClock, HandCoins, UserX, XCircle } from "lucide-react";
 import { api } from "../api.js";
 import { useI18n } from "../i18n.jsx";
-import { Bal, Badge, Btn, Card, Empty, ErrorBox, Spinner, CustName, fmt, useApp } from "../ui.jsx";
+import { Bal, Badge, Btn, Card, ContactLinks, Empty, ErrorBox, Spinner, CustName, fmt, useApp } from "../ui.jsx";
 
 function DueTag({ days }) {
   const { t } = useI18n();
@@ -24,6 +24,7 @@ function Row({ c, extra, onOpen }) {
           {c.assigned_name && <span>{c.assigned_name}</span>}
         </div>
       </button>
+      <ContactLinks mobile={c.mobile} />
       <div className="flex items-center gap-4 text-sm">
         <Bal value={c.gold_balance} unit={t("grams")} />
         <Bal value={c.cash_balance} digits={0} className="hidden sm:inline" />

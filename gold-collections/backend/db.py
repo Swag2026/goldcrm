@@ -51,6 +51,13 @@ class Customer(Base):
     silver_balance: Mapped[float] = mapped_column(Float, default=0)
     synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
+    # contact + activity (GERP "Customer & Supplier Report" Excel import se; API mein nahi aate)
+    address: Mapped[str] = mapped_column(String(500), default="")
+    mobile: Mapped[str] = mapped_column(String(64), default="")
+    last_invoice_amt: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    last_txn_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    profile_updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
     # collections workflow (yeh sync se overwrite nahi hota)
     assigned_to: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(16), default="active")  # active | hold | legal
@@ -127,15 +134,30 @@ def init_db():
     _migrate()
 
 
+# Purane databases mein jo columns nahi hain unhe add karta hai (data safe).
+_CUSTOMER_COLS = {
+    "company": "VARCHAR(32) NOT NULL DEFAULT 'swag'",
+    "address": "VARCHAR(500) NOT NULL DEFAULT ''",
+    "mobile": "VARCHAR(64) NOT NULL DEFAULT ''",
+    "last_invoice_amt": "FLOAT",
+    "last_txn_date": "DATE",
+    "profile_updated_at": "TIMESTAMP",
+}
+
+
 def _migrate():
-    """Purane (single-company) database ko bina data khoye naye schema par laata hai. Idempotent."""
+    """Purane database ko bina data khoye naye schema par laata hai. Idempotent."""
     from sqlalchemy import inspect, text
     insp = inspect(engine)
     tables = set(insp.get_table_names())
     with engine.begin() as cx:
-        if "customers" in tables and "company" not in {c["name"] for c in insp.get_columns("customers")}:
-            cx.execute(text("ALTER TABLE customers ADD COLUMN company VARCHAR(32) NOT NULL DEFAULT 'swag'"))
-            cx.execute(text("CREATE INDEX IF NOT EXISTS ix_customers_company ON customers (company)"))
+        if "customers" in tables:
+            have = {c["name"] for c in insp.get_columns("customers")}
+            for col, ddl in _CUSTOMER_COLS.items():
+                if col not in have:
+                    cx.execute(text(f"ALTER TABLE customers ADD COLUMN {col} {ddl}"))
+            if "company" not in have:
+                cx.execute(text("CREATE INDEX IF NOT EXISTS ix_customers_company ON customers (company)"))
         # purani snapshots (company nahi thi) => pehli company ke naam se copy, sirf ek baar
         if "snapshots" in tables:
             n = cx.execute(text("SELECT COUNT(*) FROM company_snapshots")).scalar()

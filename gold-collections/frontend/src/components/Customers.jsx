@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Download, FileText, RefreshCw, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, Download, FileText, RefreshCw, Search, Upload } from "lucide-react";
 import { api } from "../api.js";
 import { useI18n } from "../i18n.jsx";
+import ImportReportModal from "./ImportReportModal.jsx";
 import {
-  Bal, Badge, Btn, Card, DeltaMini, Empty, ErrorBox, PromiseBadge, Spinner, StatusBadge, CustName, fmtDate, inputCls, todayISO, useApp,
+  Bal, Badge, Btn, Card, ContactLinks, DeltaMini, Empty, ErrorBox, PromiseBadge, Spinner, StatusBadge, TxnAge, CustName, fmtDate, inputCls, todayISO, useApp,
 } from "../ui.jsx";
 
 const FILTERS = [
@@ -32,6 +33,7 @@ export default function Customers() {
   const [bulkUser, setBulkUser] = useState("");
   const [exporting, setExporting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [importing, setImporting] = useState(false);
   const doSync = async () => {
     setSyncing(true);
     try { await api.sync(); bump(); } catch (e) { toast(e.message, "err"); } finally { setSyncing(false); }
@@ -101,7 +103,10 @@ export default function Customers() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">{t("customers")} <span className="text-sm font-normal text-dim">· {data?.total ?? "…"} {t("results")}</span></h1>
-        <Btn onClick={doExport} loading={exporting}><Download size={14} /> {t("exportExcel")}</Btn>
+        <div className="flex gap-2">
+          {isAdmin && <Btn onClick={() => setImporting(true)}><Upload size={14} /> {t("importReport")}</Btn>}
+          <Btn onClick={doExport} loading={exporting}><Download size={14} /> {t("exportExcel")}</Btn>
+        </div>
       </div>
 
       <Card className="p-3">
@@ -158,6 +163,7 @@ export default function Customers() {
                   <Th k="silver">{t("silver")}</Th>
                   <Th>{t("assignedTo")}</Th>
                   <Th>{t("status")}</Th>
+                  <Th className="hidden xl:table-cell">{t("lastTxn")}</Th>
                   <Th k="last_followup" className="hidden 2xl:table-cell">{t("lastFollowup")}</Th>
                   <Th>{t("nextFollowup")}</Th>
                   <Th>{t("promise")}</Th>
@@ -176,7 +182,7 @@ export default function Customers() {
                       )}
                       <td className="min-w-[200px] max-w-[300px] px-3 py-2.5">
                         <CustName c={c} isAr={isAr} className="font-medium" />
-                        <div className="text-[11px] text-faint" dir="ltr">{c.code}</div>
+                        <div className="mt-0.5 flex items-center gap-1 text-[11px] text-faint"><span dir="ltr">{c.code}</span><ContactLinks mobile={c.mobile} className="-my-1" /></div>
                       </td>
                       <td className="px-3 py-2.5 text-end"><Bal value={c.gold_balance} unit={t("grams")} /><DeltaMini value={c.delta?.gold} balance={c.gold_balance} /></td>
                       <td className="px-3 py-2.5"><Bal value={c.cash_balance} digits={0} /><DeltaMini value={c.delta?.cash} balance={c.cash_balance} digits={0} /></td>
@@ -185,10 +191,11 @@ export default function Customers() {
                         {c.assigned_name ? c.assigned_name : <Badge tone="neutral">{t("unassigned")}</Badge>}
                       </td>
                       <td className="px-3 py-2.5"><StatusBadge status={c.status} /></td>
+                      <td className="hidden px-3 py-2.5 xl:table-cell"><TxnAge date={c.last_txn_date} days={c.days_since_txn} t={t} /></td>
                       <td className="hidden whitespace-nowrap px-3 py-2.5 text-dim 2xl:table-cell" dir="ltr">{fmtDate(c.last_followup_at) || "—"}</td>
                       <td className={`whitespace-nowrap px-3 py-2.5 ${due ? "font-semibold text-warn" : "text-dim"}`} dir="ltr">{fmtDate(c.next_followup_date) || "—"}</td>
                       <td className="px-3 py-2.5"><PromiseBadge promise={c.promise} /></td>
-                      <td className="px-2" onClick={(e) => e.stopPropagation()}>
+                      <td className="whitespace-nowrap px-2" onClick={(e) => e.stopPropagation()}>
                         <button onClick={() => openStatement(c.id)} title={t("statementBtn")} className="rounded-md p-1.5 text-dim hover:bg-card hover:text-brand"><FileText size={16} /></button>
                       </td>
                     </tr>
@@ -199,6 +206,7 @@ export default function Customers() {
           </div>
         )}
       </Card>
+      {importing && <ImportReportModal onClose={() => setImporting(false)} />}
       <p className="text-xs text-faint">
         <span className="text-danger">+</span> {t("owesUs")} · <span className="text-brand">−</span> {t("weOwe")}
         {data?.prev_day && <> · <span className="text-ok">▼</span> / <span className="text-danger">▲</span> {t("changeSince")} <span dir="ltr">{data.prev_day}</span></>}

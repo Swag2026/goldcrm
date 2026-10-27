@@ -1,5 +1,6 @@
 """GERP external API client + Gold/Silver KPI logic (Dashboards KPI PDF)."""
 import random
+from typing import Optional
 import threading
 import time
 from datetime import date
@@ -177,26 +178,101 @@ def mock_customers(to_date=None, idx: int = 0) -> list:
 
 
 # ------------------------------------------------------------------ statement
-def customer_statement(co: dict, cid: int, from_date: date, to_date: date) -> dict:
-    """Period statement: opening (from_date se ek din pehle ka cumulative) -> period debit/credit -> closing (to_date).
-    GERP `/customer-balances` cumulative hai, isliye period = difference. Line-by-line entries API mein nahi hain."""
-    from datetime import timedelta
+# GERP statement (PDF) ke columns: SAR, 24/22/21/18 carat, silver. `summary-of-all-accounts` (customers) har account ke liye
+# opening + period{debit,credit,net} carat-wise deta hai. Line-by-line entries (invoice/receipt) API mein nahi hain.
+STATEMENT_ROWS = [("sar", "amount"), ("c24", "carat_24"), ("c22", "carat_22"), ("c21", "carat_21"), ("c18", "carat_18"),
+                  ("gold24", "all_in_24"), ("silver", "silver")]
 
-    def find(rows):
-        return next((r for r in rows if int(r["id"]) == cid), None)
 
-    close = find(customer_balances(co, to_date))
-    if close is None:
-        raise HTTPException(404, "Customer GERP mein nahi mila")
-    open_ = find(customer_balances(co, from_date - timedelta(days=1))) or {}
-    out = {"customer": {"id": cid, "code": close.get("customer_code"), "name": close.get("customer_name"),
-                        "name_ar": close.get("customer_name_ar")},
-           "from_date": from_date.isoformat(), "to_date": to_date.isoformat(), "metals": {}}
-    for m in ("cash", "gold", "silver"):
-        g = lambda row, k: float(row.get(f"{m}_{k}") or 0)  # noqa: E731
-        o_bal = g(open_, "debit") - g(open_, "credit")
-        p_deb = g(close, "debit") - g(open_, "debit")
-        p_cre = g(close, "credit") - g(open_, "credit")
-        out["metals"][m] = {"opening": round(o_bal, 4), "debit": round(p_deb, 4), "credit": round(p_cre, 4),
-                            "closing": round(g(close, "debit") - g(close, "credit"), 4)}
+def _f(v) -> float:
+    try:
+        return float(v or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def customer_account_row(co: dict, code: str, from_date: date, to_date: date) -> Optional[dict]:
+    """summary-of-all-accounts ki us customer ki row (opening/period ke saath) ya None."""
+    if co["mock"]:
+        return _mock_account_row(co, code, from_date, to_date)
+    payload = {
+        "branches": co["branches"], "from_date": from_date.isoformat(), "to_date": to_date.isoformat(),
+        "account_types": ["customers"], "price_of_gold": 0, "price_of_silver": 0,
+        "convert": co["convert"], "currency": co["currency"], "rate_type": "gram", "show_data_with_zero": "yes",
+    }
+    rows = _post(co, "/summary-of-all-accounts", payload)["data"]["all_data"]
+    return next((r for r in rows if str(r.get("account_code")) == str(code)), None)
+
+
+def _row_to_lines(row: Optional[dict]) -> list:
+    out = []
+    for key, col in STATEMENT_ROWS:
+        opening = _f((row or {}).get("opening", {}).get(col))
+        p = (row or {}).get("period", {}).get(col) or {}
+        if isinstance(p, dict):
+            debit, credit = _f(p.get("debit")), _f(p.get("credit"))
+            net = _f(p.get("net")) if p.get("net") is not None else debit - credit
+        else:
+            debit = credit = 0.0
+            net = _f(p)
+        out.append({"key": key, "opening": round(opening, 4), "debit": round(debit, 4), "credit": round(credit, 4),
+                    "closing": round(opening + net, 4)})
     return out
+
+
+def customer_statement(co: dict, code: str, name: str, name_ar: str, from_date: date, to_date: date) -> dict:
+    """Period statement: opening -> period debit/credit -> closing (SAR + carat-wise gold + silver)."""
+    row = customer_account_row(co, code, from_date, to_date)
+    lines = _row_to_lines(row)
+    by = {l["key"]: l for l in lines}
+    out = {
+        "customer": {"code": code, "name": name, "name_ar": name_ar},
+        "from_date": from_date.isoformat(), "to_date": to_date.isoformat(),
+        "rows": lines,
+        "metals": {"cash": {k: by["sar"][k] for k in ("opening", "debit", "credit", "closing")},
+                   "gold": {k: by["gold24"][k] for k in ("opening", "debit", "credit", "closing")},
+                   "silver": {k: by["silver"][k] for k in ("opening", "debit", "credit", "closing")}},
+        "found": row is not None,
+    }
+    # GERP ke customer-balances (to_date) se closing match check
+    try:
+        cb = next((r for r in customer_balances(co, to_date) if str(r.get("customer_code")) == str(code)), None)
+        if cb is not None:
+            diff = {"cash": abs(out["metals"]["cash"]["closing"] - _f(cb.get("cash_balance"))),
+                    "gold": abs(out["metals"]["gold"]["closing"] - _f(cb.get("gold_balance"))),
+                    "silver": abs(out["metals"]["silver"]["closing"] - _f(cb.get("silver_balance")))}
+            out["reconciled"] = diff["cash"] < 1 and diff["gold"] < 0.01 and diff["silver"] < 1
+    except Exception:  # noqa: BLE001 - check optional hai
+        pass
+    return out
+
+
+def _mock_account_row(co: dict, code: str, from_date: date, to_date: date) -> Optional[dict]:
+    """Demo: cumulative balances ke difference se opening/period, gold ko carats mein baanta (24K-equivalent sahi rehta hai)."""
+    from datetime import timedelta
+    close = next((r for r in mock_customers(to_date, co["index"]) if str(r["customer_code"]) == str(code)), None)
+    if close is None:
+        return None
+    open_ = next((r for r in mock_customers(from_date - timedelta(days=1), co["index"]) if str(r["customer_code"]) == str(code)), {})
+    split = {"carat_24": 0.30, "carat_22": 0.0, "carat_21": 0.40, "carat_18": 0.30}
+    factor = {"carat_24": 1.0, "carat_22": 24 / 22, "carat_21": 24 / 21, "carat_18": 24 / 18}  # 24K-eq -> carat grams
+
+    def per(metal, close_k, open_k):
+        d = _f(close.get(f"{metal}_{close_k}")) - _f(open_.get(f"{metal}_{open_k}"))
+        return d
+
+    opening, period = {}, {}
+    for col, metal in (("amount", "cash"), ("silver", "silver")):
+        ob = _f(open_.get(f"{metal}_debit")) - _f(open_.get(f"{metal}_credit"))
+        deb, cre = per(metal, "debit", "debit"), per(metal, "credit", "credit")
+        opening[col] = ob
+        period[col] = {"debit": deb, "credit": cre, "net": deb - cre}
+    g_ob = _f(open_.get("gold_debit")) - _f(open_.get("gold_credit"))
+    g_deb, g_cre = per("gold", "debit", "debit"), per("gold", "credit", "credit")
+    opening["all_in_24"] = g_ob
+    period["all_in_24"] = {"debit": g_deb, "credit": g_cre, "net": g_deb - g_cre}
+    for col, share in split.items():
+        k = share * factor[col]
+        opening[col] = g_ob * k
+        period[col] = {"debit": g_deb * k, "credit": g_cre * k, "net": (g_deb - g_cre) * k}
+    return {"account_code": code, "opening": opening, "period": period}

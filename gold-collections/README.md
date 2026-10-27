@@ -10,7 +10,8 @@ crmswag1 se alag, sirf gold ke liye.
 - **Customer drawer**: balances (debit/credit/balance), notes, status (active/hold/legal), assign, follow-up log, payment promises (mark kept/broken)
 - **My Day**: due follow-ups, due promises (7 din), unassigned debtors ("Take it")
 - **Gold KPI**: Dashboards KPI PDF ke formulas (sales/purchase/net, green = positive, red = negative)
-- **Statement of account**: har customer ka period statement (opening → debit/credit → closing, gold/cash/silver), screen par + Excel + Print/PDF (Arabic bhi). GERP balances se bana summary hai, line-by-line entries API mein nahi
+- **GERP report import (admin)**: GERP ke 'Customer & Supplier Report' ka Excel upload karo -> har customer par mobile (call + WhatsApp), address, last invoice amt, last transaction (rang ke saath: 30d+ narangi, 60d+ laal) aa jata hai. Account code se match; galat company ki file refuse hoti hai
+- **Statement of account**: har customer ka period statement GERP ke look mein: company header (naam/VAT/address/logo), SAR + 24/22/21/18 carat + 24K-total + silver ka opening/debit/credit/closing, closing GERP balance se reconcile (✓). Screen + Excel + Print/PDF (landscape). `summary-of-all-accounts` se bana summary hai; line-by-line entries (invoice/receipt) GERP API mein nahi (probe se confirm: sab extra endpoints 404)
 - **Users**: admin/collector roles, disable, reset password
 - Arabic/English (RTL), dark mode, mobile friendly
 
@@ -72,3 +73,18 @@ Config: Railway/`.env` mein ek variable `GERP_COMPANIES` (JSON; passwords sirf s
 - Purana `GERP_USERNAME/GERP_PASSWORD/GERP_BASE` setup bhi chalta hai (ek company "swag").
 - Purana database apne aap migrate hota hai (customers mein `company` column, purani `snapshots` -> `company_snapshots`); data nahi jaata.
 - Total (consolidated) database ke liye alag API user + URL chahiye; wo ek aur entry se jud jayega. Total ko SWAG+LAROUCHE ke saath jodna mat (double count).
+
+## Contact info (mobile / address / last invoice / last transaction)
+Ye fields GERP ki 3 documented APIs mein nahi aate. Isliye: GERP -> Reports -> Customer & Supplier Report -> **Excel**, phir app mein
+Customers page par **Import GERP report** (admin, company select karke). Match account code se hota hai (report ka `Account Code` == customer code).
+- Suppliers aur jo codes customers mein nahi hain, "not matched" mein ginte hain (ignore hote hain).
+- Agar file galat company ki lage (codes mile par naam 50% se kam match), to refuse hota hai ("Import anyway" se force kar sakte ho).
+- Jab tak GERP vendor API nahi deta, ye import time-time par dobara karna padega (daily/weekly). Dobara import safe hai (sirf update hota hai).
+
+## Statement header (company details)
+`GERP_COMPANIES` mein har company ke saath optional fields: `legal_name`, `legal_name_en`, `vat`, `address`, `address_en` — statement ke header mein aate hain.
+Line-by-line statement (jaisa GERP ka PDF) ke liye GERP vendor se "account statement lines" endpoint chahiye (account code + from/to + branches -> document, doc no, date, remarks, debit/credit/balance per SAR aur carat).
+
+## Wording (balance ka matlab)
+Balance = Debit - Credit. **Positive = To receive** (customer ne humein dena hai, laal). **Negative = To pay** (humein customer ko dena hai, neela). 0 = Settled.
+Customer drawer ke balance cards par bhi ye word likha aata hai.

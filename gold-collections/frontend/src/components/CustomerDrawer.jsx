@@ -4,7 +4,7 @@ import { Check, FileText, MapPin, MessageCircle, Phone, StickyNote, Trash2, X, X
 import { api } from "../api.js";
 import { useI18n } from "../i18n.jsx";
 import {
-  Bal, Badge, Btn, DeltaMini, ErrorBox, Field, Pills, Spinner, StatusBadge, addDays, CustName, fmt, fmtDate, inputCls, todayISO, useApp,
+  Bal, Badge, Btn, ContactLinks, DeltaMini, ErrorBox, Field, Pills, Spinner, StatusBadge, TxnAge, addDays, CustName, fmt, fmtDate, inputCls, todayISO, useApp,
 } from "../ui.jsx";
 
 const KIND_ICON = { call: Phone, whatsapp: MessageCircle, visit: MapPin, note: StickyNote, other: HelpCircle };
@@ -20,6 +20,9 @@ function BalanceCard({ title, unit, digits, debit, credit, balance, delta }) {
     <div className="rounded-xl border border-line bg-card p-3">
       <div className="text-[11px] font-semibold uppercase tracking-wide text-dim">{title}</div>
       <Bal value={balance} unit={unit} digits={digits} className="mt-1 block text-lg" />
+      <div className={`text-[11px] font-semibold ${balance > 0.0005 ? "text-danger" : balance < -0.0005 ? "text-brand" : "text-faint"}`}>
+        {balance > 0.0005 ? t("balReceive") : balance < -0.0005 ? t("balPay") : t("balSettled")}
+      </div>
       <DeltaMini value={delta} balance={balance} digits={digits} />
       <div className="mt-1.5 space-y-0.5 text-[11px] text-faint" dir="ltr">
         <div>{t("debit")}: {fmt(debit, digits)}</div>
@@ -123,6 +126,28 @@ export default function CustomerDrawer({ id, onClose }) {
                   <BalanceCard title={t("cash")} unit="" digits={0} debit={c.cash_debit} credit={c.cash_credit} balance={c.cash_balance} delta={c.delta?.cash} />
                   <BalanceCard title={t("silver")} unit={t("grams")} digits={0} debit={c.silver_debit} credit={c.silver_credit} balance={c.silver_balance} delta={c.delta?.silver} />
                 </div>
+              </section>
+
+              {/* contact */}
+              <section className="rounded-xl border border-line bg-card p-3.5">
+                <div className="mb-2 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold">{t("contact")}</h3>
+                  {c.profile_updated_at && <span className="text-[10px] text-faint">{t("contactUpdated")}: <span dir="ltr">{c.profile_updated_at.replace("T", " ")}</span></span>}
+                </div>
+                {!c.mobile && !c.address && c.last_invoice_amt == null && !c.last_txn_date ? (
+                  <p className="text-xs text-faint">{t("noContact")}</p>
+                ) : (
+                  <dl className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2 text-sm">
+                    <dt className="text-xs text-dim">{t("mobile")}</dt>
+                    <dd className="flex items-center gap-1" dir="ltr">{c.mobile || "—"}<ContactLinks mobile={c.mobile} /></dd>
+                    <dt className="text-xs text-dim">{t("address")}</dt>
+                    <dd dir="auto" className="[unicode-bidi:plaintext]">{c.address || "—"}</dd>
+                    <dt className="text-xs text-dim">{t("lastInvoice")}</dt>
+                    <dd className="tabular-nums" dir="ltr">{c.last_invoice_amt != null ? fmt(c.last_invoice_amt) : "—"}</dd>
+                    <dt className="text-xs text-dim">{t("lastTxn")}</dt>
+                    <dd><TxnAge date={c.last_txn_date} days={c.days_since_txn} t={t} /></dd>
+                  </dl>
+                )}
               </section>
 
               {/* history */}

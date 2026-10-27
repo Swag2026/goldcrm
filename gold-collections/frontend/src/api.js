@@ -21,8 +21,9 @@ export const setUnauthorizedHandler = (fn) => { onUnauthorized = fn; };
 async function request(path, { method = "GET", body, raw = false } = {}) {
   const headers = {};
   if (token) headers.Authorization = `Bearer ${token}`;
-  if (body !== undefined) headers["Content-Type"] = "application/json";
-  const res = await fetch(`${BASE}${path}`, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+  const isBin = typeof Blob !== "undefined" && body instanceof Blob;
+  if (body !== undefined) headers["Content-Type"] = isBin ? "application/octet-stream" : "application/json";
+  const res = await fetch(`${BASE}${path}`, { method, headers, body: body === undefined ? undefined : isBin ? body : JSON.stringify(body) });
   if (res.status === 401 && !path.startsWith("/api/auth/login")) {
     onUnauthorized();
     throw new Error("Session expired");
@@ -50,6 +51,7 @@ export const api = {
   changePassword: (current, next) => request("/api/auth/password", { method: "POST", body: { current, new: next } }),
 
   companies: () => request("/api/companies"),
+  importReport: (file, force = false) => request(`/api/customers/import-report?${qs({ company, force: force ? "true" : "" })}`, { method: "POST", body: file }),
   customers: (params) => request(`/api/customers?${qs({ ...params, company })}`),
   customer: (id) => request(`/api/customers/${id}`),
   patchCustomer: (id, body) => request(`/api/customers/${id}`, { method: "PATCH", body }),
