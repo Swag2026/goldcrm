@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
 import { ArrowDownRight, ArrowUpRight, MessageCircle, Phone } from "lucide-react";
-import { Loader2 } from "lucide-react";
+import { Spinner as LoadingSpinner } from "@/components/ui/spinner";
 import { useI18n } from "./i18n.jsx";
 
 export const AppCtx = createContext(null);
@@ -77,7 +77,7 @@ export function Btn({ variant = "ghost", size = "md", className = "", loading, c
       disabled={loading || rest.disabled}
       {...rest}
     >
-      {loading && <Loader2 size={14} className="animate-spin" />}
+      {loading && <LoadingSpinner variant="circle" size={14} />}
       {children}
     </button>
   );
@@ -110,8 +110,9 @@ export function Badge({ tone = "neutral", children, className = "" }) {
 
 export function Spinner({ label }) {
   return (
-    <div className="flex items-center justify-center gap-2 p-10 text-sm text-dim">
-      <Loader2 size={16} className="animate-spin" /> {label}
+    <div className="flex flex-col items-center justify-center gap-3 p-12 text-sm text-dim" role="status">
+      <LoadingSpinner variant="ring" size={44} className="text-orange-500" />
+      <span>{label}</span>
     </div>
   );
 }
