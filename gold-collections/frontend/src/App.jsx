@@ -15,7 +15,7 @@ import GoldKpi from "./components/GoldKpi.jsx";
 import UsersPage from "./components/UsersPage.jsx";
 import GlobalSearch from "./components/GlobalSearch.jsx";
 import SyncBanner from "./components/SyncBanner.jsx";
-import { NavBar } from "@/components/ui/tubelight-navbar";
+import MacOSDock from "@/components/ui/mac-os-dock";
 import UserMenu from "./components/UserMenu.jsx";
 
 const ROUTES = [
@@ -145,7 +145,11 @@ export default function App() {
 
   const Page = { overview: Overview, customers: Customers, myday: MyDay, kpi: GoldKpi, users: UsersPage }[active];
 
-  const navItems = routes.map((r) => ({ id: r.id, name: t(r.label), icon: r.icon }));
+  const DOCK_GRAD = {
+    overview: "from-orange-400 to-orange-600", customers: "from-sky-400 to-blue-600", myday: "from-emerald-400 to-emerald-600",
+    kpi: "from-amber-300 to-yellow-600", users: "from-violet-400 to-purple-600",
+  };
+  const dockApps = routes.map((r) => ({ id: r.id, name: t(r.label), icon: r.icon, gradient: DOCK_GRAD[r.id] }));
   const initials = (user.name || "?").slice(0, 2).toUpperCase();
 
   return (
@@ -164,9 +168,6 @@ export default function App() {
                 <span className="hidden text-[10px] text-white/55 2xl:block">{t("appSub")}</span>
               </span>
             </a>
-
-            {/* nav: tubelight pill on desktop (floating icon bar on phones, below) */}
-            <NavBar className="hidden md:block" items={navItems} active={active} onSelect={go} />
 
             <div className="ms-auto flex min-w-0 flex-1 items-center justify-end gap-3 lg:flex-none">
               {companies.length > 1 && (
@@ -188,8 +189,10 @@ export default function App() {
           </div>
         </header>
 
-        <NavBar floating className="md:hidden" items={navItems} active={active} onSelect={go} />
-        <main className="px-3 pb-24 pt-5 sm:px-6 md:pb-8">
+        <div className="fixed inset-x-0 bottom-3 z-50 flex justify-center px-2 print:hidden">
+          <MacOSDock apps={dockApps} openApps={[active]} onAppClick={go} />
+        </div>
+        <main className="px-3 pb-32 pt-5 sm:px-6">
           <div className="mx-auto w-full max-w-[1400px]">
             <Page key={`${active}-${company}`} />
           </div>
