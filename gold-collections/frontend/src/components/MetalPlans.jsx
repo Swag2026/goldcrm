@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import NumberFlow from "@number-flow/react";
 import { motion } from "motion/react";
-import { CheckCheck } from "lucide-react";
+import { Banknote, CheckCheck, Coins, Gem } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VerticalCutReveal } from "@/components/ui/vertical-cut-reveal";
 import { TimelineContent } from "@/components/ui/timeline-animation";
@@ -48,7 +48,10 @@ function PlanCard({ plan, mode, t, isAr, openCustomer }) {
         : "border-line bg-panel")}>
       <div className="flex flex-col space-y-1.5 p-6 text-start">
         <div className="flex justify-between">
-          <h3 className="mb-2 text-2xl font-semibold text-ink xl:text-3xl">{plan.name}</h3>
+          <h3 className="mb-2 flex items-center gap-3 text-2xl font-semibold text-ink xl:text-3xl">
+            <span className={cn("grid size-10 shrink-0 place-items-center rounded-xl text-white shadow-md", plan.iconBg)}><plan.icon size={20} /></span>
+            {plan.name}
+          </h3>
           {plan.popular && (
             <div><span className="rounded-full bg-orange-500 px-3 py-1 text-sm font-medium text-white">{t("planMain")}</span></div>
           )}
@@ -115,19 +118,19 @@ export default function MetalPlans({ d, greet, user, openCustomer, since, sp }) 
 
   const plans = [
     {
-      key: "gold", name: t("gold"), popular: true, desc: t("planGoldDesc"), unit: t("grams"), digits: 2,
+      key: "gold", name: t("gold"), popular: true, icon: Coins, iconBg: "bg-gradient-to-t from-orange-500 to-orange-600 shadow-orange-500/30", desc: t("planGoldDesc"), unit: t("grams"), digits: 2,
       receivable: T.gold_receivable, payable: T.gold_payable, delta: ch?.gold_receivable ?? null, since,
       top: top3(d.top_gold),
       stats: [{ label: t("goldReceivable"), value: `${fmt(T.gold_receivable)} ${t("grams")}` }, { label: t("debtors"), value: T.debtors }],
     },
     {
-      key: "cash", name: t("cash"), desc: t("planCashDesc"), unit: t("sar"), digits: 0,
+      key: "cash", name: t("cash"), icon: Banknote, iconBg: "bg-gradient-to-t from-emerald-600 to-emerald-500 shadow-emerald-500/30", desc: t("planCashDesc"), unit: t("sar"), digits: 0,
       receivable: T.cash_receivable, payable: T.cash_payable, delta: ch?.cash_receivable ?? null, since,
       top: top3(d.top_cash),
       stats: [{ label: t("cashReceivable"), value: fmt(T.cash_receivable, 0) }, { label: t("debtors"), value: T.debtors }],
     },
     {
-      key: "silver", name: t("silver"), desc: t("planSilverDesc"), unit: t("grams"), digits: 0,
+      key: "silver", name: t("silver"), icon: Gem, iconBg: "bg-gradient-to-t from-slate-500 to-slate-300 shadow-slate-400/40", desc: t("planSilverDesc"), unit: t("grams"), digits: 0,
       receivable: T.silver_receivable, payable: T.silver_payable, delta: ch?.silver_receivable ?? null, since,
       top: [],
       stats: [{ label: t("silverReceivable"), value: `${fmt(T.silver_receivable, 0)} ${t("grams")}` }, { label: t("debtors"), value: T.debtors }],

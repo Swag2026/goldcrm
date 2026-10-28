@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Coins, Gem } from "lucide-react";
 import { api } from "../api.js";
 import { useI18n } from "../i18n.jsx";
 import { Badge, Btn, Card, ErrorBox, Field, Spinner, fmt, inputCls, todayISO } from "../ui.jsx";
@@ -90,7 +91,7 @@ export default function GoldKpi() {
       {d && g && s && (
         <>
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">🥇 {t("goldKpi")}</h2>
+            <h2 className="flex items-center gap-2 text-lg font-semibold"><span className="grid size-8 place-items-center rounded-lg bg-gradient-to-t from-orange-500 to-orange-600 text-white"><Coins size={16} /></span>{t("goldKpi")}</h2>
             <div className="inline-flex rounded-lg bg-card p-1 text-xs font-semibold">
               {[["grams", "gramsMode"], ["cash", "cashMode"]].map(([m, k]) => (
                 <button key={m} onClick={() => setMode(m)} className={`rounded-md px-3 py-1.5 ${mode === m ? "bg-panel text-ink shadow-card" : "text-dim"}`}>{t(k)}</button>
@@ -118,7 +119,7 @@ export default function GoldKpi() {
             ]} />
           </div>
 
-          <h2 className="text-lg font-semibold">🥈 {t("silverKpi")}</h2>
+          <h2 className="flex items-center gap-2 text-lg font-semibold"><span className="grid size-8 place-items-center rounded-lg bg-gradient-to-t from-slate-500 to-slate-300 text-white"><Gem size={16} /></span>{t("silverKpi")}</h2>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <KpiCard title={t("sales")} value={s.sales} unit={t("grams")} />
             <KpiCard title={t("purchase")} value={s.purchase} unit={t("grams")} />

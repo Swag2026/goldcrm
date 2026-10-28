@@ -102,6 +102,7 @@ export const api = {
 
   overview: () => request(`/api/overview?${qs({ company })}`),
   myday: (scope) => request(`/api/myday?${qs({ scope, company })}`),
+  syncStatus: () => request(`/api/sync/status?${qs({ company })}`),
   sync: () => request(`/api/sync?${qs({ company })}`, { method: "POST" }),
   kpi: (params) => request(`/api/kpi?${qs({ ...params, company })}`),
 };

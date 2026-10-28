@@ -3,6 +3,7 @@ import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, Res
 import { CalendarClock, HandCoins, HelpCircle, History, MapPin, MessageCircle, Phone, RefreshCw, StickyNote, TrendingDown, UserX } from "lucide-react";
 import { api } from "../api.js";
 import MetalPlans from "./MetalPlans.jsx";
+import OverviewKpi from "./OverviewKpi.jsx";
 import { useI18n } from "../i18n.jsx";
 import {
   Badge, Btn, ContactLinks, CountUp, DeltaChip, Empty, ErrorBox, Pills, Sparkline, Spinner, Tile, CustName, custName, fmt, useApp,
@@ -232,6 +233,8 @@ export default function Overview() {
 
       {/* metals: pricing-style cards */}
       <MetalPlans d={d} greet={greet} user={user} openCustomer={openCustomer} since={since} sp={sp} />
+
+      <OverviewKpi />
 
       {/* trend + paid down */}
       <div className="grid gap-4 lg:grid-cols-12">
