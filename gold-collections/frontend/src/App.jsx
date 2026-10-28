@@ -181,7 +181,7 @@ export default function App() {
                   ))}
                 </div>
               )}
-              <div className="hidden w-44 xl:block 2xl:w-64"><GlobalSearch dark /></div>
+              <div className="hidden w-56 xl:block 2xl:w-72"><GlobalSearch dark /></div>
               <UserMenu user={user} initials={initials} t={t} lang={lang} setLang={setLang} theme={theme} setTheme={setTheme}
                 onPassword={() => setPwOpen(true)} onLogout={logout} />
             </div>

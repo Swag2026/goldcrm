@@ -144,3 +144,13 @@ table tbody tr:hover td:first-child { box-shadow: inset 2px 0 0 #f97316; }
   background-size: 200% 100%;
   mix-blend-mode: color-dodge;
 }
+
+/* Orb (animated search input) */
+.orb { box-shadow: 0 0 14px 2px rgba(249, 115, 22, 0.45), inset 0 0 8px rgba(255, 255, 255, 0.25); }
+.orb-spin {
+  background: conic-gradient(from 0deg, #f97316, #fbbf24, #ef4444, #a855f7, #38bdf8, #f97316);
+  animation: orb-rotate 5s linear infinite;
+  filter: blur(3px);
+}
+@keyframes orb-rotate { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .orb-spin { animation: none; } }

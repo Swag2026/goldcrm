@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Search } from "lucide-react";
 import { api } from "../api.js";
 import { useI18n } from "../i18n.jsx";
+import { OrbInput } from "@/components/ui/animated-input";
 import { Avatar, CustName, fmt, useApp } from "../ui.jsx";
 
 // Header search: type a name or code anywhere, Enter/click opens the customer. Ctrl/Cmd+K focuses it.
@@ -50,13 +50,11 @@ export default function GlobalSearch({ dark = false }) {
   const show = open && q.trim().length >= 2;
   return (
     <div ref={boxRef} className="relative w-full">
-      <Search size={15} className={`pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 ${dark ? "text-white/55" : "text-faint"}`} />
-      <input ref={inputRef} value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onKeyDown={onKeyDown}
-        placeholder={t("searchAnywhere")} aria-label={t("searchAnywhere")}
-        className={`w-full rounded-lg border py-2 pe-12 ps-9 text-sm focus:outline-none focus:ring-2 ${dark ? "border-white/15 bg-white/10 text-white placeholder:text-white/50 focus:border-orange-400 focus:ring-orange-400/30" : "border-line bg-card text-ink placeholder:text-faint focus:border-orange-500 focus:ring-orange-500/20"}`} />
-      <kbd className={`pointer-events-none absolute end-2.5 top-1/2 hidden -translate-y-1/2 rounded border px-1.5 py-0.5 text-[10px] 2xl:block ${dark ? "border-white/20 text-white/55" : "border-line bg-panel text-faint"}`}>Ctrl K</kbd>
+      <OrbInput inputRef={inputRef} value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onKeyDown={onKeyDown}
+        placeholders={[t("searchAnywhere"), t("searchHint1"), t("searchHint2")]} aria-label={t("searchAnywhere")}
+        trailing={<kbd className="pointer-events-none me-1 hidden rounded border border-white/20 px-1.5 py-0.5 text-[10px] text-white/55 2xl:block">Ctrl K</kbd>} />
       {show && (
-        <div className="absolute inset-x-0 top-full z-50 mt-1.5 overflow-hidden rounded-lg border border-line bg-panel shadow-pop">
+        <div className="absolute inset-x-0 top-full z-50 mt-1.5 overflow-hidden rounded-lg border border-line bg-panel text-ink shadow-pop">
           {rows.length === 0 ? (
             <div className="px-4 py-3 text-sm text-faint">{busy ? t("loading") : t("noCustomers")}</div>
           ) : rows.map((c, i) => (
@@ -64,7 +62,7 @@ export default function GlobalSearch({ dark = false }) {
               className={`flex w-full items-center gap-3 px-3 py-2 text-start ${i === idx ? "bg-hover" : ""}`}>
               <Avatar c={c} isAr={isAr} size={30} />
               <span className="min-w-0 flex-1">
-                <CustName c={c} isAr={isAr} compact className="text-sm font-medium" />
+                <CustName c={c} isAr={isAr} clamp className="text-sm font-medium" />
                 <span className="block text-[11px] text-faint" dir="ltr">{c.code}</span>
               </span>
               <span className="shrink-0 text-end text-[11px] tabular-nums" dir="ltr">
