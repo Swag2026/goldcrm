@@ -16,6 +16,7 @@ import UsersPage from "./components/UsersPage.jsx";
 import GlobalSearch from "./components/GlobalSearch.jsx";
 import SyncBanner from "./components/SyncBanner.jsx";
 import MacOSDock from "@/components/ui/mac-os-dock";
+import DraggableDock from "./components/DraggableDock.jsx";
 import UserMenu from "./components/UserMenu.jsx";
 
 const ROUTES = [
@@ -189,9 +190,9 @@ export default function App() {
           </div>
         </header>
 
-        <div className="fixed inset-x-0 bottom-3 z-50 flex justify-center px-2 print:hidden">
+        <DraggableDock resetLabel={t("dockReset")}>
           <MacOSDock apps={dockApps} openApps={[active]} onAppClick={go} />
-        </div>
+        </DraggableDock>
         <main className="px-3 pb-32 pt-5 sm:px-6">
           <div className="mx-auto w-full max-w-[1400px]">
             <Page key={`${active}-${company}`} />
