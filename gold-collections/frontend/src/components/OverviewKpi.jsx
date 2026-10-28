@@ -20,7 +20,7 @@ function Stat({ icon: Icon, label, value, unit, tone }) {
       <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-dim">
         <Icon size={13} /> {label}
       </div>
-      <div className={`mt-2 text-2xl font-semibold tabular-nums ${tone || "text-ink"}`} dir="ltr">
+      <div className={`mt-2 text-xl font-semibold tabular-nums xl:text-[22px] ${tone || "text-ink"}`} dir="ltr">
         {tone && value > 0 ? "+" : ""}{fmt(value, unit === "g" ? 2 : 0)}
         <span className="ms-1 text-sm font-medium text-faint">{unit}</span>
       </div>

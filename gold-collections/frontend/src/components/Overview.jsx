@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { CalendarClock, HandCoins, HelpCircle, History, MapPin, MessageCircle, Phone, RefreshCw, StickyNote, TrendingDown, UserX } from "lucide-react";
 import { api } from "../api.js";
-import MetalPlans from "./MetalPlans.jsx";
 import OverviewKpi from "./OverviewKpi.jsx";
 import { useI18n } from "../i18n.jsx";
 import {
@@ -218,6 +217,7 @@ export default function Overview() {
       {/* header */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
+          <h1 className="text-2xl font-bold">{greet}, <span className="text-brand">{user.name}</span></h1>
           <p className="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-dim">
             {dateStr} · {t("overviewSub")}
             {companies.length > 1 && <Badge tone="brand">{companies.find((c) => c.key === company)?.name}</Badge>}
@@ -231,8 +231,21 @@ export default function Overview() {
         </div>
       </div>
 
-      {/* metals: pricing-style cards */}
-      <MetalPlans d={d} greet={greet} user={user} openCustomer={openCustomer} since={since} sp={sp} />
+      {/* KPI row */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiTile accent label={t("goldReceivable")} value={T.gold_receivable} unit={t("grams")} digits={2}
+          delta={ch?.gold_receivable ?? null} since={since} spark={sp("gold_receivable")} color="var(--gold)" hint={t("noHistoryYet")}
+          sub={`${t("weOweTotal")}: ${fmt(T.gold_payable)} ${t("grams")}`} />
+        <KpiTile label={t("cashReceivable")} value={T.cash_receivable} unit={t("sar")} digits={0}
+          delta={ch?.cash_receivable ?? null} since={since} spark={sp("cash_receivable")} color="var(--primary)" hint={t("noHistoryYet")}
+          sub={`${t("weOweTotal")}: ${fmt(T.cash_payable, 0)}`} />
+        <KpiTile label={t("silverReceivable")} value={T.silver_receivable} unit={t("grams")} digits={0}
+          delta={ch?.silver_receivable ?? null} since={since} spark={sp("silver_receivable")} color="#7b8794" hint={t("noHistoryYet")}
+          sub={`${t("weOweTotal")}: ${fmt(T.silver_payable, 0)} ${t("grams")}`} />
+        <KpiTile label={t("debtors")} value={T.debtors} digits={0}
+          delta={ch ? ch.debtors : null} since={since} spark={sp("debtors")} color="var(--ok)" hint={t("noHistoryYet")}
+          sub={`${d.customers_with_balance} ${t("withBalance")}`} />
+      </div>
 
       <OverviewKpi />
 
